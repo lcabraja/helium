@@ -1,0 +1,3952 @@
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -629,4 +629,16 @@
+ #define IDC_WRITING_DIRECTION_DEFAULT 57311
+ 
+ 
++// Helium container tabs. Keep the dynamic range in sync with kMaxContainers.
++#define IDC_NEW_CONTAINER_TAB  55000
++#define IDC_MANAGE_CONTAINERS  55001
++#define IDC_CONTAINER_DEFAULT 55002
++#define IDC_REOPEN_IN_CONTAINER 55003
++#define IDC_OPEN_LINK_IN_CONTAINER 55004
++#define IDC_OPEN_IMAGE_IN_CONTAINER 55005
++#define IDC_OPEN_BOOKMARK_IN_CONTAINER 55006
++#define IDC_OPEN_MEDIA_IN_CONTAINER 55007
++#define IDC_CONTAINER_FIRST 55100
++#define IDC_CONTAINER_LAST  55199
++
+ #endif  // CHROME_APP_CHROME_COMMAND_IDS_H_
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -20561,6 +20561,44 @@ Please help our engineers fix this probl
+     <message name="IDS_OSCRYPTASYNC_AVAILABILITY_INFOBAR_BUTTON" desc="The text of the button to proceed with relaunching the entire browser to resolve keychain permission issues.">
+       Relaunch
+     </message>
++
++    <!-- Helium container tabs. -->
++    <message name="IDS_CONTAINER_PERSONAL" desc="Helium container tabs: personal">Personal</message>
++    <message name="IDS_CONTAINER_WORK" desc="Helium container tabs: work">Work</message>
++    <message name="IDS_CONTAINER_BANKING" desc="Helium container tabs: banking">Banking</message>
++    <message name="IDS_CONTAINER_SHOPPING" desc="Helium container tabs: shopping">Shopping</message>
++    <message name="IDS_CONTAINER_NEW_TAB" desc="Helium container tabs: new tab">New container tab</message>
++    <message name="IDS_CONTAINER_OPEN_LINK" desc="Helium container tabs: open link">Open link in new container tab</message>
++    <message name="IDS_CONTAINER_OPEN_MEDIA" desc="Helium container tabs: open media">Open media in new container tab</message>
++    <message name="IDS_CONTAINER_OPEN_IMAGE" desc="Helium container tabs: open image">Open image in new container tab</message>
++    <message name="IDS_CONTAINER_OPEN" desc="Helium container tabs: open">Open</message>
++    <message name="IDS_CONTAINER_OPEN_TABS" desc="Helium container tabs: open tabs">Open in new container tab</message>
++    <message name="IDS_CONTAINER_REOPEN" desc="Helium container tabs: reopen">Reopen in container</message>
++    <message name="IDS_CONTAINER_NONE" desc="Helium container tabs: none">No container</message>
++    <message name="IDS_CONTAINER_CHOOSE" desc="Helium container tabs: choose">Container</message>
++    <message name="IDS_CONTAINER_MANAGE" desc="Helium container tabs: manage">Manage containers</message>
++    <message name="IDS_CONTAINER_ADD" desc="Helium container tabs: add">Add container</message>
++    <message name="IDS_CONTAINER_EDIT" desc="Helium container tabs: edit">Edit</message>
++    <message name="IDS_CONTAINER_DELETE" desc="Helium container tabs: delete">Delete container</message>
++    <message name="IDS_CONTAINER_NAME" desc="Helium container tabs: name">Name</message>
++    <message name="IDS_CONTAINER_COLOR" desc="Helium container tabs: color">Color</message>
++    <message name="IDS_CONTAINER_ICON" desc="Helium container tabs: icon">Icon</message>
++    <message name="IDS_CONTAINER_ENABLED" desc="Helium container tabs: enabled">Enable container tabs</message>
++    <message name="IDS_CONTAINER_ASK_NEW_TAB" desc="Helium container tabs: ask new tab">Select a container for each new tab</message>
++    <message name="IDS_CONTAINER_BLUE" desc="Helium container tabs: blue">Blue</message>
++    <message name="IDS_CONTAINER_ORANGE" desc="Helium container tabs: orange">Orange</message>
++    <message name="IDS_CONTAINER_GREEN" desc="Helium container tabs: green">Green</message>
++    <message name="IDS_CONTAINER_PINK" desc="Helium container tabs: pink">Pink</message>
++    <message name="IDS_CONTAINER_PURPLE" desc="Helium container tabs: purple">Purple</message>
++    <message name="IDS_CONTAINER_RED" desc="Helium container tabs: red">Red</message>
++    <message name="IDS_CONTAINER_TURQUOISE" desc="Helium container tabs: turquoise">Turquoise</message>
++    <message name="IDS_CONTAINER_GRAY" desc="Helium container tabs: gray">Gray</message>
++    <message name="IDS_CONTAINER_SAVE" desc="Helium container tabs: save">Save</message>
++    <message name="IDS_CONTAINER_DONE" desc="Helium container tabs: done">Done</message>
++    <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 100 containers.</message>
++    <message name="IDS_CONTAINER_CLOSE_PENDING" desc="Helium container tabs: close pending">Finish closing the container tabs, then try again. Site data has not been deleted.</message>
++    <message name="IDS_CONTAINER_DELETED" desc="Helium container tabs: deleted">Deleted container</message>
++    <message name="IDS_CONTAINER_DELETE_CONFIRM" desc="Helium container tabs: delete confirm">Close all tabs in <ph name="CONTAINER_NAME">$1<ex>Work</ex></ph> and delete its cookies and site data? This cannot be undone.</message>
+   </messages>
+ </release>
+ </grit>
+--- a/chrome/browser/browsing_data/BUILD.gn
++++ b/chrome/browser/browsing_data/BUILD.gn
+@@ -103,6 +103,7 @@ source_set("impl") {
+     "//chrome/browser/autofill",
+     "//chrome/browser/bookmarks",
+     "//chrome/browser/commerce",
++    "//chrome/browser/containers",
+     "//chrome/browser/content_settings:content_settings_factory",
+     "//chrome/browser/crash_upload_list",
+     "//chrome/browser/custom_handlers",
+--- a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
+ #include "chrome/browser/browsing_data/navigation_entry_remover.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/crash_upload_list/crash_upload_list.h"
+ #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+@@ -182,7 +183,7 @@
+ #include "chrome/browser/ui/android/tab_model/tab_model.h"
+ #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
+ #include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck crbug.com/40147906
+-#include "components/feed/core/v2/public/feed_service.h"    // nogncheck
++#include "components/feed/core/v2/public/feed_service.h"  // nogncheck
+ #include "components/feed/feed_feature_list.h"
+ #include "components/installedapp/android/jni_headers/PackageHash_jni.h"
+ #include "components/offline_pages/core/offline_page_feature.h"
+@@ -425,8 +426,9 @@ void ChromeBrowsingDataRemoverDelegate::
+           CreateTaskCompletionClosure(TracingDataType::kHistory),
+           &history_task_tracker_);
+     }
+-    if (ClipboardRecentContent::GetInstance())
++    if (ClipboardRecentContent::GetInstance()) {
+       ClipboardRecentContent::GetInstance()->SuppressClipboardContent();
++    }
+ 
+     language::UrlLanguageHistogram* language_histogram =
+         UrlLanguageHistogramFactory::GetForBrowserContext(profile_);
+@@ -504,8 +506,9 @@ void ChromeBrowsingDataRemoverDelegate::
+ 
+     OptimizationGuideKeyedService* optimization_guide_keyed_service =
+         OptimizationGuideKeyedServiceFactory::GetForProfile(profile_);
+-    if (optimization_guide_keyed_service)
++    if (optimization_guide_keyed_service) {
+       optimization_guide_keyed_service->ClearData();
++    }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+     // Remove localStorage data from Lens Overlay UI whenever any history is
+@@ -522,8 +525,9 @@ void ChromeBrowsingDataRemoverDelegate::
+ #if BUILDFLAG(IS_ANDROID)
+     OomInterventionDecider* oom_intervention_decider =
+         OomInterventionDecider::GetForBrowserContext(profile_);
+-    if (oom_intervention_decider)
++    if (oom_intervention_decider) {
+       oom_intervention_decider->ClearData();
++    }
+ #endif
+ 
+     // The SSL Host State that tracks SSL interstitial "proceed" decisions may
+@@ -570,10 +574,12 @@ void ChromeBrowsingDataRemoverDelegate::
+         std::u16string(), /*web_contents=*/nullptr);
+ 
+ #if BUILDFLAG(IS_ANDROID)
+-    if (auto* share_history = sharing::ShareHistory::Get(profile_))
++    if (auto* share_history = sharing::ShareHistory::Get(profile_)) {
+       share_history->Clear(delete_begin_, delete_end_);
+-    if (auto* share_ranking = sharing::ShareRanking::Get(profile_))
++    }
++    if (auto* share_ranking = sharing::ShareRanking::Get(profile_)) {
+       share_ranking->Clear(delete_begin_, delete_end_);
++    }
+ #endif
+ 
+     // Also clear the last used time in bookmarks.
+@@ -630,8 +636,9 @@ void ChromeBrowsingDataRemoverDelegate::
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     safe_browsing::SafeBrowsingService* sb_service =
+         g_browser_process->safe_browsing_service();
+-    if (sb_service)
++    if (sb_service) {
+       safe_browsing_context = sb_service->GetNetworkContext(profile_);
++    }
+ #endif
+ 
+     // Cleared for DATA_TYPE_HISTORY, DATA_TYPE_COOKIES and DATA_TYPE_PASSWORDS.
+@@ -666,8 +673,9 @@ void ChromeBrowsingDataRemoverDelegate::
+     if (filter_builder->MatchesAllOriginsAndDomains()) {
+       content::OriginTrialsControllerDelegate* delegate =
+           profile_->GetOriginTrialsControllerDelegate();
+-      if (delegate)
++      if (delegate) {
+         delegate->ClearPersistedTokens();
++      }
+     }
+ 
+     if (auto* media_device_salt_service =
+@@ -775,8 +783,9 @@ void ChromeBrowsingDataRemoverDelegate::
+ 
+     auto* handler_registry =
+         ProtocolHandlerRegistryFactory::GetForBrowserContext(profile_);
+-    if (handler_registry)
++    if (handler_registry) {
+       handler_registry->ClearUserDefinedHandlers(delete_begin_, delete_end_);
++    }
+ 
+     ChromeTranslateClient::CreateTranslatePrefs(prefs)
+         ->DeleteNeverPromptSitesBetween(delete_begin_, delete_end_);
+@@ -829,8 +838,9 @@ void ChromeBrowsingDataRemoverDelegate::
+     auto* spellcheck = SpellcheckServiceFactory::GetForContext(profile_);
+     if (spellcheck) {
+       auto* dict = spellcheck->GetCustomDictionary();
+-      if (dict)
++      if (dict) {
+         dict->Clear();
++      }
+     }
+   }
+ 
+@@ -1158,11 +1168,12 @@ void ChromeBrowsingDataRemoverDelegate::
+       auto* offline_page_model =
+           offline_pages::OfflinePageModelFactory::GetForBrowserContext(
+               profile_);
+-      if (offline_page_model)
++      if (offline_page_model) {
+         offline_page_model->DeleteCachedPagesByURLPredicate(
+             filter,
+             base::IgnoreArgs<offline_pages::OfflinePageModel::DeletePageResult>(
+                 CreateTaskCompletionClosure(TracingDataType::kOfflinePages)));
++      }
+ 
+       // Deletes the recent search entries for Android Settings.
+       Java_RecentSearchQueue_deleteDiskData(
+@@ -1300,11 +1311,13 @@ void ChromeBrowsingDataRemoverDelegate::
+     // |search_prefetch_service| is null if |profile_| is off the record.
+     auto* search_prefetch_service =
+         SearchPrefetchServiceFactory::GetForProfile(profile_);
+-    if (should_clear_search_prefetch && search_prefetch_service)
++    if (should_clear_search_prefetch && search_prefetch_service) {
+       search_prefetch_service->ClearPrefetches();
++    }
+ 
+-    if (should_clear_zero_suggest_and_session_token && template_url_service)
++    if (should_clear_zero_suggest_and_session_token && template_url_service) {
+       template_url_service->ClearSessionToken();
++    }
+   }
+ 
+   //////////////////////////////////////////////////////////////////////////////
+@@ -1312,12 +1325,13 @@ void ChromeBrowsingDataRemoverDelegate::
+   if (remove_mask & (content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+                      constants::DATA_TYPE_HISTORY)) {
+     network::mojom::NetworkContext_DomainReliabilityClearMode mode;
+-    if (remove_mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES)
++    if (remove_mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES) {
+       mode = network::mojom::NetworkContext::DomainReliabilityClearMode::
+           CLEAR_CONTEXTS;
+-    else
++    } else {
+       mode = network::mojom::NetworkContext::DomainReliabilityClearMode::
+           CLEAR_BEACONS;
++    }
+     domain_reliability_clearer_.Run(filter_builder, mode,
+                                     CreateTaskCompletionClosureForMojo(
+                                         TracingDataType::kDomainReliability));
+@@ -1359,8 +1373,9 @@ void ChromeBrowsingDataRemoverDelegate::
+ // DATA_TYPE_WEB_APP_DATA
+ #if BUILDFLAG(IS_ANDROID)
+   // Clear all data associated with registered webapps.
+-  if (remove_mask & constants::DATA_TYPE_WEB_APP_DATA)
++  if (remove_mask & constants::DATA_TYPE_WEB_APP_DATA) {
+     webapp_registry_->UnregisterWebappsForUrls(filter);
++  }
+ #endif
+ 
+ //////////////////////////////////////////////////////////////////////////////
+@@ -1423,6 +1438,27 @@ void ChromeBrowsingDataRemoverDelegate::
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   //////////////////////////////////////////////////////////////////////////////
++  // Containers participate in clear-browsing-data, including containers whose
++  // tabs have not been opened during this browser session. Partition-specific
++  // requests (such as Clear-Site-Data) must not affect another container.
++  if (!filter_builder->GetStoragePartitionConfig().has_value()) {
++    const uint64_t container_mask =
++        remove_mask &
++        content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
++    if (container_mask) {
++      for (const auto& container :
++           helium::containers::GetContainers(profile_)) {
++        auto container_filter = filter_builder->Copy();
++        container_filter->SetStoragePartitionConfig(
++            helium::containers::GetPartitionConfig(profile_, container.id));
++        // The remover queues nested requests, as it does for IWAs below.
++        profile_->GetBrowsingDataRemover()->RemoveWithFilter(
++            delete_begin, delete_end, container_mask, origin_type_mask,
++            std::move(container_filter));
++      }
++    }
++  }
++
+   // Isolated Web Apps.
+   // If no StoragePartition was specified in the filter, make additional
+   // BrowsingDataRemover::Remove* calls for each StoragePartition of Isolated
+@@ -1580,8 +1616,9 @@ void ChromeBrowsingDataRemoverDelegate::
+     failed_data_types_ |= data_type_mask;
+   }
+ 
+-  if (!pending_sub_tasks_.empty())
++  if (!pending_sub_tasks_.empty()) {
+     return;
++  }
+ 
+   if (deferred_disable_passwords_auto_signin_cb_) {
+     std::move(deferred_disable_passwords_auto_signin_cb_).Run();
+--- /dev/null
++++ b/chrome/browser/containers/BUILD.gn
+@@ -0,0 +1,46 @@
++# Copyright 2026 The Helium Authors
++# Use of this source code is governed by a GPL-3.0 license that can be
++# found in the LICENSE file.
++
++source_set("containers") {
++  sources = [
++    "container_service.cc",
++    "container_service.h",
++  ]
++  public_deps = [
++    "//base",
++    "//content/public/browser",
++    "//skia",
++  ]
++  deps = [
++    "//base",
++    "//chrome/app:generated_resources",
++    "//chrome/browser/profiles:profile",
++    "//components/prefs",
++    "//content/public/browser",
++    "//services/network/public/mojom",
++    "//skia",
++    "//third_party/blink/public/common",
++    "//ui/base",
++  ]
++}
++
++source_set("browser_tests") {
++  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
++  testonly = true
++  sources = [ "container_browsertest.cc" ]
++  deps = [
++    ":containers",
++    "//base/test:test_support",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/resource_coordinator",
++    "//chrome/browser/ui",
++    "//chrome/browser/ui/navigator",
++    "//chrome/browser/ui/tabs:tab_strip",
++    "//chrome/test:test_support",
++    "//components/prefs",
++    "//content/test:test_support",
++    "//net:test_support",
++    "//testing/gtest",
++  ]
++}
+--- /dev/null
++++ b/chrome/browser/containers/container_browsertest.cc
+@@ -0,0 +1,329 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#include "base/functional/bind.h"
++#include "base/test/test_future.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/containers/container_ui.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
++
++namespace helium::containers {
++
++class ContainerBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpOnMainThread() override {
++    host_resolver()->AddRule("*", "127.0.0.1");
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        [](const net::test_server::HttpRequest& request)
++            -> std::unique_ptr<net::test_server::HttpResponse> {
++          auto response =
++              std::make_unique<net::test_server::BasicHttpResponse>();
++          if (request.relative_url == "/container-worker.js") {
++            response->set_content_type("application/javascript");
++            response->set_content("self.addEventListener('fetch', () => {});");
++          } else {
++            response->set_content_type("text/html");
++            response->set_content(
++                "<!doctype html><title>Container test</title>");
++          }
++          return response;
++        }));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++ protected:
++  content::WebContents* Open(const std::string& id) {
++    OpenInContainer(browser(), {embedded_test_server()->GetURL("/test")}, id);
++    auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
++    EXPECT_TRUE(content::WaitForLoadStop(tab));
++    EXPECT_EQ(id, GetContainerId(tab));
++    return tab;
++  }
++
++  std::string Personal() {
++    return GetContainers(browser()->GetProfile())[0].id;
++  }
++  std::string Work() { return GetContainers(browser()->GetProfile())[1].id; }
++};
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, DefaultsAndValidatedEdits) {
++  auto* profile = browser()->GetProfile();
++  ASSERT_EQ(4u, GetContainers(profile).size());
++  EXPECT_FALSE(SaveContainer(profile, {}, u"   ", 0, 0));
++  EXPECT_FALSE(SaveContainer(profile, {}, std::u16string(65, u'x'), 0, 0));
++  EXPECT_FALSE(SaveContainer(profile, {}, u"Bad color", 8, 0));
++  EXPECT_FALSE(SaveContainer(profile, {}, u"Bad icon", 0, -1));
++  EXPECT_FALSE(SaveContainer(profile, "../outside", u"Bad ID", 0, 0));
++  const auto id = SaveContainer(profile, {}, u"  Accounts  ", 4, 6);
++  ASSERT_TRUE(id);
++  ASSERT_TRUE(FindContainer(profile, *id));
++  EXPECT_EQ(u"Accounts", FindContainer(profile, *id)->name);
++  EXPECT_EQ(id, SaveContainer(profile, *id, u"Renamed", 2, 1));
++  EXPECT_EQ(5u, GetContainers(profile).size());
++  EXPECT_EQ(u"Renamed", FindContainer(profile, *id)->name);
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       StorageIsSharedOnlyWithinIdentity) {
++  auto* work = Open(Work());
++  ASSERT_TRUE(content::ExecJs(work, R"(
++    (async () => {
++      document.cookie = 'account=work; max-age=3600; path=/';
++      localStorage.setItem('account', 'work');
++      await new Promise((resolve, reject) => {
++        const request = indexedDB.open('container-test', 1);
++        request.onupgradeneeded = () => request.result.createObjectStore('data');
++        request.onerror = reject;
++        request.onsuccess = () => {
++          const transaction = request.result.transaction('data', 'readwrite');
++          transaction.objectStore('data').put('work', 'account');
++          transaction.oncomplete = () => { request.result.close(); resolve(); };
++          transaction.onerror = reject;
++        };
++      });
++      const cache = await caches.open('container-test');
++      await cache.put('/account', new Response('work'));
++      await navigator.serviceWorker.register('/container-worker.js');
++      await navigator.serviceWorker.ready;
++    })()
++  )"));
++  auto* same = Open(Work());
++  EXPECT_EQ("account=work", content::EvalJs(same, "document.cookie"));
++  EXPECT_EQ("work", content::EvalJs(same, "localStorage.getItem('account')"));
++  EXPECT_EQ(1,
++            content::EvalJs(
++                same, "(async () => (await indexedDB.databases()).length)()"));
++  EXPECT_EQ(
++      1, content::EvalJs(same, "(async () => (await caches.keys()).length)()"));
++  EXPECT_EQ(1, content::EvalJs(
++                   same,
++                   "(async () => (await "
++                   "navigator.serviceWorker.getRegistrations()).length)()"));
++  for (const auto& id : {Personal(), std::string()}) {
++    auto* other = Open(id);
++    EXPECT_EQ("", content::EvalJs(other, "document.cookie"));
++    EXPECT_EQ(true, content::EvalJs(
++                        other, "localStorage.getItem('account') === null"));
++    EXPECT_EQ(
++        0, content::EvalJs(
++               other, "(async () => (await indexedDB.databases()).length)()"));
++    EXPECT_EQ(0, content::EvalJs(
++                     other, "(async () => (await caches.keys()).length)()"));
++    EXPECT_EQ(0, content::EvalJs(
++                     other,
++                     "(async () => (await "
++                     "navigator.serviceWorker.getRegistrations()).length)()"));
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       BroadcastChannelCannotCrossIdentity) {
++  auto* work = Open(Work());
++  auto* personal = Open(Personal());
++  auto* peer = Open(Work());
++  for (auto* tab : {work, personal, peer}) {
++    ASSERT_TRUE(content::ExecJs(tab, R"(
++      window.received = [];
++      window.channel = new BroadcastChannel('container-test');
++      channel.onmessage = e => received.push(e.data);
++    )"));
++  }
++  // A response from the same-container peer gives us a delivery barrier.
++  ASSERT_TRUE(content::ExecJs(
++      peer, "channel.onmessage = () => channel.postMessage('ack')"));
++  EXPECT_EQ("ack", content::EvalJs(work, R"(
++    new Promise(resolve => {
++      channel.onmessage = e => resolve(e.data);
++      channel.postMessage('work');
++    })
++  )"));
++  EXPECT_EQ(0, content::EvalJs(personal, "received.length"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, InheritanceAndExplicitSwitch) {
++  auto* source = Open(Work());
++  ASSERT_TRUE(
++      content::ExecJs(source, "document.cookie = 'account=work; path=/'"));
++  NavigateParams params(browser(), embedded_test_server()->GetURL("/child"),
++                        ui::PAGE_TRANSITION_LINK);
++  params.source_contents = source;
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++  auto* child = browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(child));
++  EXPECT_EQ(Work(), GetContainerId(child));
++  EXPECT_EQ("account=work", content::EvalJs(child, "document.cookie"));
++  auto* personal = Open(Personal());
++  EXPECT_EQ(true, content::EvalJs(personal, "window.opener === null"));
++  EXPECT_EQ("", content::EvalJs(personal, "document.referrer"));
++  EXPECT_EQ("", content::EvalJs(personal, "document.cookie"));
++  // NewTab has no explicit source and must stay outside containers.
++  auto& ordinary = chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
++  EXPECT_TRUE(GetContainerId(&ordinary).empty());
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, ExplicitSwitchDetachesOpener) {
++  auto* source = Open(Work());
++  NavigateParams params(browser(), embedded_test_server()->GetURL("/switched"),
++                        ui::PAGE_TRANSITION_LINK);
++  params.source_contents = source;
++  params.opener = source->GetPrimaryMainFrame();
++  params.source_site_instance = params.opener->GetSiteInstance();
++  params.referrer = content::Referrer(source->GetLastCommittedURL(),
++                                      network::mojom::ReferrerPolicy::kDefault);
++  params.container_id = Personal();
++  params.disposition = WindowOpenDisposition::CURRENT_TAB;
++  Navigate(&params);
++  auto* switched = browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_NE(source, switched);
++  ASSERT_TRUE(content::WaitForLoadStop(switched));
++  EXPECT_EQ(Personal(), GetContainerId(switched));
++  EXPECT_EQ(Work(), GetContainerId(source));
++  EXPECT_EQ(true, content::EvalJs(switched, "window.opener === null"));
++  EXPECT_EQ("", content::EvalJs(switched, "document.referrer"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       CrossSiteNavigationKeepsPartition) {
++  auto* tab = Open(Work());
++  auto* partition = tab->GetPrimaryMainFrame()->GetStoragePartition();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("other.test", "/other")));
++  EXPECT_EQ(Work(), GetContainerId(tab));
++  EXPECT_EQ(partition, tab->GetPrimaryMainFrame()->GetStoragePartition());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/test")));
++  EXPECT_EQ(partition, tab->GetPrimaryMainFrame()->GetStoragePartition());
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, NoopenerPopupKeepsPartition) {
++  auto* tab = Open(Work());
++  content::WebContentsAddedObserver observer;
++  ASSERT_TRUE(
++      content::ExecJs(tab, "window.open('/popup', '_blank', 'noopener')"));
++  auto* popup = observer.GetWebContents();
++  ASSERT_TRUE(popup);
++  ASSERT_TRUE(content::WaitForLoadStop(popup));
++  EXPECT_EQ(Work(), GetContainerId(popup));
++  EXPECT_EQ(true, content::EvalJs(popup, "window.opener === null"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, DuplicateAndClosedTabRestore) {
++  auto* original = Open(Work());
++  ASSERT_TRUE(
++      content::ExecJs(original, "sessionStorage.setItem('account', 'work')"));
++  chrome::DuplicateTab(browser());
++  auto* model = browser()->tab_strip_model();
++  EXPECT_EQ(Work(), GetContainerId(model->GetActiveWebContents()));
++  ASSERT_TRUE(content::WaitForLoadStop(model->GetActiveWebContents()));
++  EXPECT_EQ("work", content::EvalJs(model->GetActiveWebContents(),
++                                    "sessionStorage.getItem('account')"));
++  model->CloseWebContentsAt(model->active_index(),
++                            TabCloseTypes::CLOSE_USER_GESTURE |
++                                TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
++  chrome::RestoreTab(browser());
++  ASSERT_TRUE(content::WaitForLoadStop(model->GetActiveWebContents()));
++  EXPECT_EQ(Work(), GetContainerId(model->GetActiveWebContents()));
++  EXPECT_EQ("work", content::EvalJs(model->GetActiveWebContents(),
++                                    "sessionStorage.getItem('account')"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, HibernateKeepsPartition) {
++  auto* work = Open(Work());
++  auto* model = browser()->tab_strip_model();
++  const int index = model->GetIndexOfWebContents(work);
++  ASSERT_TRUE(content::ExecJs(work, "localStorage.setItem('account', 'work')"));
++  Open({});
++  auto* lifecycle =
++      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(work);
++  ASSERT_TRUE(lifecycle);
++  ASSERT_TRUE(
++      lifecycle->DiscardTab(mojom::LifecycleUnitDiscardReason::EXTERNAL));
++  EXPECT_EQ(Work(), GetContainerId(model->GetWebContentsAt(index)));
++  model->ActivateTabAt(index);
++  ASSERT_TRUE(content::WaitForLoadStop(model->GetWebContentsAt(index)));
++  EXPECT_EQ("work", content::EvalJs(model->GetWebContentsAt(index),
++                                    "localStorage.getItem('account')"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       DeletedOrMalformedIdentityFailsClosed) {
++  const auto id =
++      SaveContainer(browser()->GetProfile(), {}, u"Disposable", 0, 0);
++  ASSERT_TRUE(id);
++  ASSERT_TRUE(RemoveContainer(browser()->GetProfile(), *id));
++  for (const auto& invalid : {*id, std::string("../../outside")}) {
++    auto instance = CreateSiteInstance(browser()->GetProfile(),
++                                       GURL("about:blank"), invalid);
++    const auto& config = browser()
++                             ->GetProfile()
++                             ->GetStoragePartition(instance.get())
++                             ->GetConfig();
++    EXPECT_FALSE(config.is_default());
++    EXPECT_TRUE(config.in_memory());
++    EXPECT_EQ(kPartitionDomain, config.partition_domain());
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, IncognitoAndDisabledCreation) {
++  auto* profile = browser()->GetProfile();
++  auto* incognito = profile->GetPrimaryOTRProfile(true);
++  EXPECT_FALSE(IsEnabled(incognito));
++  EXPECT_TRUE(GetContainers(incognito).empty());
++  EXPECT_FALSE(SaveContainer(incognito, {}, u"Private", 0, 0));
++  auto* work = Open(Work());
++  profile->GetPrefs()->SetBoolean(kEnabledPref, false);
++  const int count = browser()->tab_strip_model()->count();
++  OpenInContainer(browser(), {}, Work());
++  EXPECT_EQ(count, browser()->tab_strip_model()->count());
++  EXPECT_EQ(Work(), GetContainerId(work));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, PRE_PersistentIdentityAndStorage) {
++  const auto id =
++      SaveContainer(browser()->GetProfile(), {}, u"Persistent", 2, 3);
++  ASSERT_TRUE(id);
++  auto* tab = Open(*id);
++  ASSERT_TRUE(content::ExecJs(tab, R"(
++    document.cookie = 'persist=yes; max-age=86400; path=/';
++    localStorage.setItem('persist', 'yes');
++  )"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, PersistentIdentityAndStorage) {
++  for (const auto& container : GetContainers(browser()->GetProfile())) {
++    if (container.name == u"Persistent") {
++      auto* tab = Open(container.id);
++      // Cookies are keyed by host rather than port; the test server gets a
++      // different port on the second run. Check disk persistence with cookies.
++      EXPECT_EQ("persist=yes", content::EvalJs(tab, "document.cookie"));
++      EXPECT_EQ(2, container.color);
++      EXPECT_EQ(3, container.icon);
++      return;
++    }
++  }
++  FAIL() << "Container metadata did not survive profile restart";
++}
++
++}  // namespace helium::containers
+--- /dev/null
++++ b/chrome/browser/containers/container_service.cc
+@@ -0,0 +1,205 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/containers/container_service.h"
++
++#include <array>
++#include <utility>
++
++#include "base/check.h"
++#include "base/functional/callback_helpers.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/time/time.h"
++#include "base/uuid.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "services/network/public/mojom/clear_data_filter.mojom.h"
++#include "services/network/public/mojom/network_context.mojom.h"
++#include "third_party/blink/public/common/storage_key/storage_key.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace helium::containers {
++namespace {
++
++bool IsValidId(const std::string& id) {
++  return base::Uuid::ParseLowercase(id).is_valid();
++}
++
++base::DictValue ToValue(const Container& container) {
++  return base::DictValue()
++      .Set("id", container.id)
++      .Set("name", base::UTF16ToUTF8(container.name))
++      .Set("color", container.color)
++      .Set("icon", container.icon);
++}
++
++}  // namespace
++
++void RegisterProfilePrefs(PrefRegistrySimple* registry) {
++  base::ListValue defaults;
++  constexpr std::array<int, 4> names = {
++      IDS_CONTAINER_PERSONAL, IDS_CONTAINER_WORK, IDS_CONTAINER_BANKING,
++      IDS_CONTAINER_SHOPPING};
++  constexpr std::array<const char*, 4> ids = {
++      "00000000-0000-4000-8000-000000000001",
++      "00000000-0000-4000-8000-000000000002",
++      "00000000-0000-4000-8000-000000000003",
++      "00000000-0000-4000-8000-000000000004"};
++  for (size_t i = 0; i < names.size(); ++i) {
++    defaults.Append(ToValue({ids[i], l10n_util::GetStringUTF16(names[i]),
++                             static_cast<int>(i), static_cast<int>(i)}));
++  }
++  registry->RegisterListPref(kContainersPref, std::move(defaults));
++  registry->RegisterBooleanPref(kEnabledPref, true);
++  registry->RegisterBooleanPref(kAskForNewTabPref, false);
++}
++
++bool IsEnabled(Profile* profile) {
++  return profile && !profile->IsOffTheRecord() &&
++         profile->GetPrefs()->GetBoolean(kEnabledPref);
++}
++
++std::vector<Container> GetContainers(Profile* profile) {
++  std::vector<Container> containers;
++  if (!profile || profile->IsOffTheRecord()) {
++    return containers;
++  }
++  for (const auto& value : profile->GetPrefs()->GetList(kContainersPref)) {
++    const auto* dict = value.GetIfDict();
++    if (!dict) {
++      continue;
++    }
++    const auto* id = dict->FindString("id");
++    const auto* name = dict->FindString("name");
++    const auto color = dict->FindInt("color");
++    const auto icon = dict->FindInt("icon");
++    if (!id || !IsValidId(*id) || !name || name->empty() || !color ||
++        *color < 0 || *color >= static_cast<int>(kColorCount) || !icon ||
++        *icon < 0 || *icon >= static_cast<int>(kIconCount)) {
++      continue;
++    }
++    containers.push_back({*id, base::UTF8ToUTF16(*name), *color, *icon});
++    if (containers.size() == kMaxContainers) {
++      break;
++    }
++  }
++  return containers;
++}
++
++std::optional<Container> FindContainer(Profile* profile,
++                                       const std::string& id) {
++  for (const auto& container : GetContainers(profile)) {
++    if (container.id == id) {
++      return container;
++    }
++  }
++  return std::nullopt;
++}
++
++std::optional<std::string> SaveContainer(Profile* profile,
++                                         const std::string& id,
++                                         std::u16string name,
++                                         int color,
++                                         int icon) {
++  base::TrimWhitespace(name, base::TRIM_ALL, &name);
++  if (!profile || profile->IsOffTheRecord() || name.empty() ||
++      name.size() > 64 || color < 0 || color >= static_cast<int>(kColorCount) ||
++      icon < 0 || icon >= static_cast<int>(kIconCount) ||
++      (!id.empty() && !FindContainer(profile, id)) ||
++      (id.empty() && GetContainers(profile).size() >= kMaxContainers)) {
++    return std::nullopt;
++  }
++  const std::string result =
++      id.empty() ? base::Uuid::GenerateRandomV4().AsLowercaseString() : id;
++  ScopedListPrefUpdate update(profile->GetPrefs(), kContainersPref);
++  base::DictValue value = ToValue({result, std::move(name), color, icon});
++  for (auto& item : *update) {
++    if (item.is_dict() && item.GetDict().FindString("id") &&
++        *item.GetDict().FindString("id") == result) {
++      item = base::Value(std::move(value));
++      return result;
++    }
++  }
++  update->Append(std::move(value));
++  return result;
++}
++
++bool RemoveContainer(Profile* profile, const std::string& id) {
++  if (!FindContainer(profile, id)) {
++    return false;
++  }
++  auto* partition =
++      profile->GetStoragePartition(GetPartitionConfig(profile, id));
++  {
++    ScopedListPrefUpdate update(profile->GetPrefs(), kContainersPref);
++    update->EraseIf([&id](const base::Value& value) {
++      return value.is_dict() && value.GetDict().FindString("id") &&
++             *value.GetDict().FindString("id") == id;
++    });
++  }
++  partition->GetNetworkContext()->ClearHttpCache(
++      base::Time(), base::Time::Max(), nullptr, base::DoNothing());
++  partition->GetNetworkContext()->ClearHttpAuthCache(
++      base::Time(), base::Time::Max(), nullptr, base::DoNothing());
++  partition->ClearData(content::StoragePartition::REMOVE_DATA_MASK_ALL,
++                       blink::StorageKey(), base::Time(), base::Time::Max(),
++                       base::DoNothing());
++  return true;
++}
++
++SkColor GetColor(int color) {
++  constexpr std::array<SkColor, kColorCount> colors = {
++      SkColorSetRGB(0x37, 0x78, 0xd4), SkColorSetRGB(0xe6, 0x89, 0x22),
++      SkColorSetRGB(0x2e, 0x96, 0x55), SkColorSetRGB(0xd6, 0x53, 0x87),
++      SkColorSetRGB(0x89, 0x64, 0xc8), SkColorSetRGB(0xda, 0x48, 0x48),
++      SkColorSetRGB(0x20, 0x98, 0xa0), SkColorSetRGB(0x7b, 0x80, 0x87)};
++  return colors[color >= 0 && color < static_cast<int>(colors.size()) ? color
++                                                                      : 0];
++}
++
++std::u16string GetIcon(int icon) {
++  constexpr std::array<const char16_t*, kIconCount> icons = {
++      u"●", u"▣", u"◆", u"◈", u"★", u"✿", u"▲", u"☂"};
++  return icons[icon >= 0 && icon < static_cast<int>(icons.size()) ? icon : 0];
++}
++
++std::string GetContainerId(content::WebContents* contents) {
++  if (!contents) {
++    return {};
++  }
++  const auto& config =
++      contents->GetPrimaryMainFrame()->GetStoragePartition()->GetConfig();
++  return config.partition_domain() == kPartitionDomain ? config.partition_name()
++                                                       : std::string();
++}
++
++content::StoragePartitionConfig GetPartitionConfig(Profile* profile,
++                                                   const std::string& id) {
++  CHECK(IsValidId(id));
++  return content::StoragePartitionConfig::Create(
++      profile, kPartitionDomain, id,
++      /*in_memory=*/profile->IsOffTheRecord() || !FindContainer(profile, id));
++}
++
++scoped_refptr<content::SiteInstance> CreateSiteInstance(Profile* profile,
++                                                        const GURL& url,
++                                                        const std::string& id) {
++  // A damaged session identifier must also fail closed.
++  const auto safe_id =
++      IsValidId(id) ? id : base::Uuid::GenerateRandomV4().AsLowercaseString();
++  return content::SiteInstance::CreateForFixedStoragePartition(
++      profile, url, GetPartitionConfig(profile, safe_id));
++}
++
++}  // namespace helium::containers
+--- /dev/null
++++ b/chrome/browser/containers/container_service.h
+@@ -0,0 +1,69 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_CONTAINERS_CONTAINER_SERVICE_H_
++#define CHROME_BROWSER_CONTAINERS_CONTAINER_SERVICE_H_
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/memory/scoped_refptr.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "third_party/skia/include/core/SkColor.h"
++
++class Profile;
++class GURL;
++class PrefRegistrySimple;
++namespace content {
++class SiteInstance;
++class WebContents;
++}  // namespace content
++
++namespace helium::containers {
++
++inline constexpr char kContainersPref[] = "helium.containers.identities";
++inline constexpr char kEnabledPref[] = "helium.containers.enabled";
++inline constexpr char kAskForNewTabPref[] = "helium.containers.ask_for_new_tab";
++inline constexpr char kSessionKey[] = "helium.container_id";
++inline constexpr char kPartitionDomain[] = "helium-containers";
++inline constexpr size_t kMaxContainers = 100;
++inline constexpr size_t kColorCount = 8;
++inline constexpr size_t kIconCount = 8;
++
++struct Container {
++  std::string id;
++  std::u16string name;
++  int color = 0;
++  int icon = 0;
++};
++
++void RegisterProfilePrefs(PrefRegistrySimple* registry);
++bool IsEnabled(Profile* profile);
++std::vector<Container> GetContainers(Profile* profile);
++std::optional<Container> FindContainer(Profile* profile, const std::string& id);
++// IDs never change on rename and are never reused after deletion.
++std::optional<std::string> SaveContainer(Profile* profile,
++                                         const std::string& id,
++                                         std::u16string name,
++                                         int color,
++                                         int icon);
++// Call only after closing the container's tabs. Erases all partition data.
++bool RemoveContainer(Profile* profile, const std::string& id);
++SkColor GetColor(int color);
++std::u16string GetIcon(int icon);
++
++// Read identity from the actual storage partition, including popups and clones.
++std::string GetContainerId(content::WebContents* contents);
++content::StoragePartitionConfig GetPartitionConfig(Profile* profile,
++                                                   const std::string& id);
++// Unknown/deleted identities restore into an empty, memory-only partition.
++// They must never fall back to the profile's authenticated default partition.
++scoped_refptr<content::SiteInstance> CreateSiteInstance(Profile* profile,
++                                                        const GURL& url,
++                                                        const std::string& id);
++
++}  // namespace helium::containers
++
++#endif  // CHROME_BROWSER_CONTAINERS_CONTAINER_SERVICE_H_
+--- a/chrome/browser/renderer_context_menu/BUILD.gn
++++ b/chrome/browser/renderer_context_menu/BUILD.gn
+@@ -82,6 +82,7 @@ source_set("impl") {
+     "//base",
+     "//base:i18n",
+     "//chrome/browser/app_mode",
++    "//chrome/browser/containers",
+     "//chrome/browser/ui",
+     "//chrome/common",
+     "//components/renderer_context_menu",
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -47,6 +47,7 @@
+ #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+ #include "chrome/browser/browser_features.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/context_hub/context_hub_service.h"
+ #include "chrome/browser/context_hub/context_hub_service_factory.h"
+ #include "chrome/browser/context_hub/features.h"
+@@ -114,6 +115,7 @@
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+ #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
+ #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
+@@ -215,10 +217,10 @@
+ #include "components/strings/grit/components_strings.h"
+ #include "components/supervised_user/core/browser/supervised_user_preferences.h"
+ #include "components/supervised_user/core/browser/supervised_user_url_filtering_service.h"
+-#include "components/translate/core/common/translate_switches.h"
+ #include "components/translate/core/browser/translate_download_manager.h"
+ #include "components/translate/core/browser/translate_manager.h"
+ #include "components/translate/core/browser/translate_prefs.h"
++#include "components/translate/core/common/translate_switches.h"
+ #include "components/translate/core/common/translate_util.h"
+ #include "components/url_formatter/url_formatter.h"
+ #include "components/user_prefs/user_prefs.h"
+@@ -1038,7 +1040,8 @@ bool RenderViewContextMenu::IsDevToolsUR
+ }
+ 
+ // static
+-void RenderViewContextMenu::AddSpellCheckServiceItem(ui::SimpleMenuModel*, bool) {}
++void RenderViewContextMenu::AddSpellCheckServiceItem(ui::SimpleMenuModel*,
++                                                     bool) {}
+ 
+ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
+                                       kExitFullscreenMenuItem);
+@@ -1961,6 +1964,15 @@ void RenderViewContextMenu::AppendLinkIt
+                  : IDS_CONTENT_CONTEXT_OPENLINKNEWTAB);
+     }
+ 
++    if (show_open_in_new_tab && GetBrowser() &&
++        helium::containers::IsEnabled(GetBrowser()->GetProfile())) {
++      container_link_menu_ = helium::containers::CreateContainerMenu(
++          GetBrowser(), {params_.link_url});
++      menu_model_.AddSubMenuWithStringId(IDC_OPEN_LINK_IN_CONTAINER,
++                                         IDS_CONTAINER_OPEN_LINK,
++                                         container_link_menu_.get());
++    }
++
+     if (show_open_in_new_window) {
+       AddItemWithOptionalIcon(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
+                               IDS_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
+@@ -2033,13 +2045,14 @@ void RenderViewContextMenu::AppendLinkIt
+         enterprise_isolated_mode::IsolatedModeReplacesIncognito(GetProfile());
+ 
+     if (show_open_link_off_the_record && isolated_mode_enabled) {
+-      AddItemWithOptionalIcon(IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED,
+-                              features::IsMenuSimplificationEnabled()
+-                                  ? IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED_V2
+-                                  : IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED,
+-                              features::IsRoundedIconsEnabled()
+-                                  ? vector_icons::kDomainIcon
+-                                  : vector_icons::kBusinessChromeRefreshOldIcon);
++      AddItemWithOptionalIcon(
++          IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED,
++          features::IsMenuSimplificationEnabled()
++              ? IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED_V2
++              : IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED,
++          features::IsRoundedIconsEnabled()
++              ? vector_icons::kDomainIcon
++              : vector_icons::kBusinessChromeRefreshOldIcon);
+     }
+ 
+     AppendOpenInWebAppLinkItems();
+@@ -2282,6 +2295,14 @@ void RenderViewContextMenu::AppendImageI
+     // Glic doesn't have tabs, to this option doesn't make sense there.
+     AddItemWithOptionalIcon(IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB,
+                             IDS_CONTENT_CONTEXT_OPENIMAGENEWTAB, kImageIcon);
++    if (GetBrowser() &&
++        helium::containers::IsEnabled(GetBrowser()->GetProfile())) {
++      container_image_menu_ = helium::containers::CreateContainerMenu(
++          GetBrowser(), {params_.src_url});
++      menu_model_.AddSubMenuWithStringId(IDC_OPEN_IMAGE_IN_CONTAINER,
++                                         IDS_CONTAINER_OPEN_IMAGE,
++                                         container_image_menu_.get());
++    }
+   }
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                   IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
+@@ -2366,6 +2387,14 @@ void RenderViewContextMenu::AppendAudioI
+   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
+                                   IDS_CONTENT_CONTEXT_OPENAUDIONEWTAB);
++  if (GetBrowser() &&
++      helium::containers::IsEnabled(GetBrowser()->GetProfile())) {
++    container_media_menu_ = helium::containers::CreateContainerMenu(
++        GetBrowser(), {params_.src_url});
++    menu_model_.AddSubMenuWithStringId(IDC_OPEN_MEDIA_IN_CONTAINER,
++                                       IDS_CONTAINER_OPEN_MEDIA,
++                                       container_media_menu_.get());
++  }
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                   IDS_CONTENT_CONTEXT_SAVEAUDIOAS);
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
+@@ -2404,6 +2433,14 @@ void RenderViewContextMenu::AppendVideoI
+   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
+                                   IDS_CONTENT_CONTEXT_OPENVIDEONEWTAB);
++  if (GetBrowser() &&
++      helium::containers::IsEnabled(GetBrowser()->GetProfile())) {
++    container_media_menu_ = helium::containers::CreateContainerMenu(
++        GetBrowser(), {params_.src_url});
++    menu_model_.AddSubMenuWithStringId(IDC_OPEN_MEDIA_IN_CONTAINER,
++                                       IDS_CONTAINER_OPEN_MEDIA,
++                                       container_media_menu_.get());
++  }
+ 
+   ui::SimpleMenuModel* target_model = &menu_model_;
+   if (use_submenu) {
+@@ -2633,8 +2670,10 @@ void RenderViewContextMenu::AppendPageIt
+   }
+ 
+   if (CanTranslate(/*menu_logging=*/true)) {
+-   if (base::CommandLine::ForCurrentProcess()->HasSwitch(translate::switches::kTranslateScriptURL))
+-    AppendTranslateItem();
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++            translate::switches::kTranslateScriptURL)) {
++      AppendTranslateItem();
++    }
+   }
+ }
+ 
+@@ -3206,8 +3245,6 @@ void RenderViewContextMenu::AppendSharin
+   }
+ }
+ 
+-
+-
+ void RenderViewContextMenu::AppendRegionSearchItem() {
+   auto* entry_point_controller =
+       GetBrowser() ? lens::LensOverlayEntryPointController::From(GetBrowser())
+@@ -3272,6 +3309,11 @@ void RenderViewContextMenu::AppendLiveCa
+ // Menu delegate functions -----------------------------------------------------
+ 
+ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
++  if (id == IDC_OPEN_LINK_IN_CONTAINER || id == IDC_OPEN_IMAGE_IN_CONTAINER ||
++      id == IDC_OPEN_MEDIA_IN_CONTAINER) {
++    return GetBrowser() &&
++           helium::containers::IsEnabled(GetBrowser()->GetProfile());
++  }
+ #if BUILDFLAG(IS_CHROMEOS)
+   // Disable context menu in locked fullscreen mode to prevent users from
+   // exiting this mode (the menu is not really disabled as the user can still
+@@ -4717,10 +4759,9 @@ void RenderViewContextMenu::AppendSendTa
+             : send_tab_to_self::kSendTabToSelfEnhancedDesktopUI;
+ 
+     // TODO(crbug.com/516708776): Remove new feature tag when no longer new.
+-    menu_model_.SetIsNewFeatureAt(
+-        menu_model_.GetItemCount() - 1,
+-        UserEducationService::MaybeShowNewBadge(GetBrowserContext(),
+-                                                stts_feature));
++    menu_model_.SetIsNewFeatureAt(menu_model_.GetItemCount() - 1,
++                                  UserEducationService::MaybeShowNewBadge(
++                                      GetBrowserContext(), stts_feature));
+     return;
+   }
+ 
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.h
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.h
+@@ -182,6 +182,9 @@ class RenderViewContextMenu
+ 
+   // This may return nullptr (e.g. for WebUI dialogs). Virtual to allow tests to
+   // override.
++  std::unique_ptr<ui::SimpleMenuModel> container_link_menu_;
++  std::unique_ptr<ui::SimpleMenuModel> container_image_menu_;
++  std::unique_ptr<ui::SimpleMenuModel> container_media_menu_;
+   virtual BrowserWindowInterface* GetBrowser() const;
+   bool IsNormalBrowser() const;
+ 
+--- a/chrome/browser/resource_coordinator/BUILD.gn
++++ b/chrome/browser/resource_coordinator/BUILD.gn
+@@ -86,6 +86,7 @@ source_set("impl") {
+   public_deps = [
+     ":resource_coordinator",
+     "//chrome/browser:browser_public_dependencies",
++    "//chrome/browser/containers",
+   ]
+ 
+   deps = [
+--- a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
++++ b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+@@ -17,6 +17,7 @@
+ #include "base/notreached.h"
+ #include "base/process/process_metrics.h"
+ #include "build/build_config.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+ #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+ #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+@@ -272,6 +273,12 @@ void TabLifecycleUnitSource::TabLifecycl
+     uint64_t tab_memory_footprint_estimate) {
+   content::WebContents* const old_contents = web_contents();
+   content::WebContents::CreateParams create_params(tab_strip_model_->profile());
++  const auto container_id = helium::containers::GetContainerId(old_contents);
++  if (!container_id.empty()) {
++    create_params.site_instance = helium::containers::CreateSiteInstance(
++        tab_strip_model_->profile(), old_contents->GetVisibleURL(),
++        container_id);
++  }
+   // TODO(fdoray): Consider setting |initially_hidden| to true when the tab is
+   // OCCLUDED. Will require checking that the tab reload correctly when it
+   // becomes VISIBLE.
+--- a/chrome/browser/resources/bookmarks/command_manager.ts
++++ b/chrome/browser/resources/bookmarks/command_manager.ts
+@@ -258,6 +258,7 @@ export class BookmarksCommandManagerElem
+             !isRootOrChildOfRoot(this.getState(), Array.from(itemIds)[0]!);
+       case Command.OPEN_INCOGNITO:
+       case Command.OPEN_NEW_GROUP:
++      case Command.OPEN_CONTAINER:
+       case Command.OPEN_NEW_TAB:
+       case Command.OPEN_NEW_WINDOW:
+       case Command.OPEN_SPLIT_VIEW:
+@@ -290,6 +291,10 @@ export class BookmarksCommandManagerElem
+   }
+ 
+   protected isCommandEnabled_(command: Command, itemIds: Set<string>): boolean {
++    if (command === Command.OPEN_CONTAINER &&
++        !loadTimeData.getBoolean('containersAvailable')) {
++      return false;
++    }
+     const state = this.getState();
+     switch (command) {
+       case Command.EDIT:
+@@ -299,6 +304,7 @@ export class BookmarksCommandManagerElem
+           return !canEditNode(state, node.id);
+         });
+       case Command.OPEN_NEW_GROUP:
++      case Command.OPEN_CONTAINER:
+       case Command.OPEN_NEW_TAB:
+       case Command.OPEN_NEW_WINDOW:
+         return this.expandIds_(itemIds).length > 0;
+@@ -427,6 +433,7 @@ export class BookmarksCommandManagerElem
+         break;
+       case Command.OPEN_INCOGNITO:
+       case Command.OPEN_ISOLATED:
++      case Command.OPEN_CONTAINER:
+       case Command.OPEN_NEW_TAB:
+       case Command.OPEN_NEW_WINDOW:
+       case Command.OPEN_SPLIT_VIEW:
+@@ -562,6 +569,7 @@ export class BookmarksCommandManagerElem
+   private openBookmarkIds_(ids: string[], command: Command) {
+     assert(
+         command === Command.OPEN || command === Command.OPEN_NEW_TAB ||
++        command === Command.OPEN_CONTAINER ||
+         command === Command.OPEN_NEW_WINDOW ||
+         command === Command.OPEN_INCOGNITO ||
+         command === Command.OPEN_ISOLATED ||
+@@ -578,6 +586,10 @@ export class BookmarksCommandManagerElem
+ 
+     const openBookmarkIdsCallback = () => {
+       const state = this.getState();
++      if (command === Command.OPEN_CONTAINER) {
++        chrome.send('openInContainer', [ids.map(id => state.nodes[id]!.url!)]);
++        return;
++      }
+       const legacyIds = ids.map(id => getLegacyId(state.nodes[id]));
+       const incognito = command === Command.OPEN_INCOGNITO ||
+           command === Command.OPEN_ISOLATED;
+@@ -720,6 +732,8 @@ export class BookmarksCommandManagerElem
+ 
+     // Handle pluralized strings.
+     switch (command) {
++      case Command.OPEN_CONTAINER:
++        return loadTimeData.getString('openInContainer');
+       case Command.OPEN_NEW_TAB:
+         return this.getPluralizedOpenAllString_(
+             'menuOpenAllNewTab', 'menuOpenNewTab',
+@@ -779,6 +793,7 @@ export class BookmarksCommandManagerElem
+           Command.OPEN_ISOLATED,
+           Command.OPEN_NEW_GROUP,
+           Command.OPEN_NEW_TAB,
++          Command.OPEN_CONTAINER,
+           Command.OPEN_NEW_WINDOW,
+           Command.OPEN_SPLIT_VIEW,
+         ];
+@@ -792,6 +807,7 @@ export class BookmarksCommandManagerElem
+             Command.PASTE,
+             Command.DELETE,
+             Command.OPEN_NEW_TAB,
++          Command.OPEN_CONTAINER,
+             Command.OPEN_NEW_WINDOW,
+             Command.OPEN_SPLIT_VIEW,
+             Command.OPEN_NEW_GROUP,
+--- a/chrome/browser/resources/bookmarks/constants.ts
++++ b/chrome/browser/resources/bookmarks/constants.ts
+@@ -54,7 +54,8 @@ export enum Command {
+   OPEN_ISOLATED = 25,
+ 
+   // Append new values to the end of the enum.
+-  MAX_VALUE = 26,
++  OPEN_CONTAINER = 26,
++  MAX_VALUE = 27,
+ }
+ // LINT.ThenChange(//tools/metrics/histograms/metadata/bookmarks/enums.xml:BookmarkManagerCommand)
+ 
+--- a/chrome/browser/resources/history/history_list.html.ts
++++ b/chrome/browser/resources/history/history_list.html.ts
+@@ -74,6 +74,9 @@ export function getHtml(this: HistoryLis
+     <cr-lazy-render-lit id="sharedMenu" .template='${() => html`
+         <cr-action-menu auto-close-on-focusout
+             role-description="$i18n{actionMenuDescription}">
++          <button class="dropdown-item"
++              ?hidden="${!this.containersAvailable_}"
++              @click="${this.onOpenInContainerClick_}">$i18n{openInContainer}</button>
+           <button id="menuMoreButton" class="dropdown-item"
+               ?hidden="${!this.canSearchMoreFromSite_()}"
+               @click="${this.onMoreFromSiteClick_}">
+--- a/chrome/browser/resources/history/history_list.ts
++++ b/chrome/browser/resources/history/history_list.ts
+@@ -85,6 +85,7 @@ export class HistoryListElement extends
+       selectedItems: {type: Object},
+ 
+       canDeleteHistory_: {type: Boolean},
++      containersAvailable_: {type: Boolean},
+ 
+       // An array of history entries in reverse chronological order.
+       historyData_: {type: Array},
+@@ -495,6 +496,15 @@ export class HistoryListElement extends
+         action, VisitContextMenuAction.MAX_VALUE);
+   }
+ 
++  protected accessor containersAvailable_ = loadTimeData.getBoolean('containersAvailable');
++
++  protected onOpenInContainerClick_() {
++    if (this.actionMenuModel_) {
++      chrome.send('openInContainer', [[this.actionMenuModel_.item.url]]);
++      this.closeMenu_();
++    }
++  }
++
+   protected onMoreFromSiteClick_() {
+     BrowserProxyImpl.getInstance().recordAction('EntryMenuShowMoreFromSite');
+     this.recordContextMenuActionsHistogram_(
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -50,6 +50,8 @@ export function getHtml(this: SettingsAp
+ </if>
+     </div>
+     <div id="toolbarRow" class="settings-row">
++      <cr-link-row label="$i18n{containerManage}"
++          @click="${this.onManageContainersClick_}"></cr-link-row>
+       <cr-link-row id="customizeToolbar"
+           label="$i18n{customizeToolbar}"
+           @click="${this.onCustomizeToolbarClick_}" external>
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.ts
+@@ -461,6 +461,10 @@ export class SettingsAppearancePageEleme
+     return homepageValue || this.i18n('customWebAddress');
+   }
+ 
++  protected onManageContainersClick_() {
++    chrome.send('manageContainers');
++  }
++
+   protected onCustomizeFontsClick_() {
+     Router.getInstance().navigateTo(routes.FONTS);
+   }
+--- a/chrome/browser/resources/side_panel/bookmarks/power_bookmarks_context_menu.ts
++++ b/chrome/browser/resources/side_panel/bookmarks/power_bookmarks_context_menu.ts
+@@ -43,6 +43,7 @@ export enum MenuItemId {
+   DIVIDER = 10,
+   OPEN_SPLIT_VIEW = 11,
+   OPEN_ISOLATED = 12,
++  OPEN_CONTAINER = 13,
+ }
+ 
+ export interface MenuItem {
+@@ -155,6 +156,12 @@ export class PowerBookmarksContextMenuEl
+     });
+     const menuItems: MenuItem[] = [
+       {
++        id: MenuItemId.OPEN_CONTAINER,
++        label: loadTimeData.getString('openInContainer'),
++        disabled: bookmarkCount === 0 ||
++            !loadTimeData.getBoolean('containersAvailable'),
++      },
++      {
+         id: MenuItemId.OPEN_NEW_TAB,
+         label: bookmarkCount < 2 ?
+             loadTimeData.getString('menuOpenNewTab') :
+@@ -219,6 +226,12 @@ export class PowerBookmarksContextMenuEl
+ 
+       const revisedItems: MenuItem[] = [
+         {
++          id: MenuItemId.OPEN_CONTAINER,
++          label: loadTimeData.getString('openInContainer'),
++          disabled: bookmarkCount === 0 ||
++              !loadTimeData.getBoolean('containersAvailable'),
++        },
++        {
+           id: MenuItemId.OPEN_NEW_TAB,
+           label: bookmarkCount < 2 ?
+               loadTimeData.getString('menuOpenNewTab') :
+@@ -387,6 +400,10 @@ export class PowerBookmarksContextMenuEl
+     const id = Number((event.currentTarget as HTMLElement).dataset['id']) as
+         MenuItemId;
+     switch (id) {
++      case MenuItemId.OPEN_CONTAINER:
++        this.bookmarksApi_.openInContainer(
++            this.bookmarks_.map(bookmark => bookmark.id));
++        break;
+       case MenuItemId.OPEN_NEW_TAB:
+         this.bookmarksApi_.contextMenuOpenBookmarkInNewTab(
+             this.bookmarks_.map(bookmark => bookmark.id),
+--- a/chrome/browser/sessions/BUILD.gn
++++ b/chrome/browser/sessions/BUILD.gn
+@@ -78,6 +78,7 @@ source_set("impl") {
+   ]
+ 
+   deps = [
++    "//chrome/browser/containers",
+     "//chrome/browser/glic",
+     "//chrome/browser/lifetime",
+   ]
+--- a/chrome/browser/sessions/session_restore.cc
++++ b/chrome/browser/sessions/session_restore.cc
+@@ -41,6 +41,7 @@
+ #include "chrome/browser/after_startup_task_utils.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/buildflags.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/prefs/session_startup_pref.h"
+ #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+ #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
+@@ -1056,8 +1057,7 @@ class SessionRestoreImpl : public Browse
+       if (window.tabs[source_index]->navigations.empty()) {
+         continue;
+       }
+-      if (!restoring_into_empty_browser ||
+-          source_index != selected_tab_index) {
++      if (!restoring_into_empty_browser || source_index != selected_tab_index) {
+         restore_tab_at_index(source_index, next_insertion_index,
+                              /*select=*/false);
+       }
+@@ -1113,11 +1113,26 @@ class SessionRestoreImpl : public Browse
+ 
+     // Associate sessionStorage (if any) to the restored tab.
+     scoped_refptr<content::SessionStorageNamespace> session_storage_namespace;
+-    if (!tab.session_storage_persistent_id.empty()) {
++    const auto saved_container =
++        tab.extra_data.find(helium::containers::kSessionKey);
++    const bool known_container =
++        saved_container == tab.extra_data.end() ||
++        saved_container->second.empty() ||
++        helium::containers::FindContainer(profile_, saved_container->second)
++            .has_value();
++    if (known_container && !tab.session_storage_persistent_id.empty()) {
++      auto* partition = profile_->GetDefaultStoragePartition();
++      const auto container =
++          tab.extra_data.find(helium::containers::kSessionKey);
++      if (container != tab.extra_data.end() && !container->second.empty() &&
++          helium::containers::FindContainer(profile_, container->second)) {
++        partition = profile_->GetStoragePartition(
++            helium::containers::GetPartitionConfig(profile_,
++                                                   container->second));
++      }
+       session_storage_namespace =
+-          profile_->GetDefaultStoragePartition()
+-              ->GetDOMStorageContext()
+-              ->RecreateSessionStorage(tab.session_storage_persistent_id);
++          partition->GetDOMStorageContext()->RecreateSessionStorage(
++              tab.session_storage_persistent_id);
+     }
+ 
+     // Relabel group IDs to prevent duplicating groups. See crbug.com/40055647.
+@@ -1139,9 +1154,8 @@ class SessionRestoreImpl : public Browse
+         last_active_time_ticks, last_active_time,
+         session_storage_namespace.get(), tab.user_agent_override,
+         tab.extra_data, true /* from_session_restore */, is_active_browser,
+-        is_selected_tab
+-            ? chrome::RestoredTabLoadPolicy::kLoadIfVisible
+-            : chrome::RestoredTabLoadPolicy::kDeferUntilActivation);
++        is_selected_tab ? chrome::RestoredTabLoadPolicy::kLoadIfVisible
++                        : chrome::RestoredTabLoadPolicy::kDeferUntilActivation);
+     DCHECK(web_contents);
+ 
+     RestoredTab restored_tab(web_contents, is_selected_tab,
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -21,6 +21,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/session_service_base_observer.h"
+ #include "chrome/browser/sessions/session_service_log.h"
+@@ -56,7 +57,9 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_details.h"
+ #include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/session_storage_namespace.h"
++#include "content/public/browser/storage_partition.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -82,6 +85,12 @@ using sessions::SerializedNavigationEntr
+ 
+ namespace {
+ 
++content::SessionStorageNamespace* GetTabSessionStorage(
++    content::WebContents* tab) {
++  return tab->GetController().GetSessionStorageNamespace(
++      tab->GetPrimaryMainFrame()->GetStoragePartition()->GetConfig());
++}
++
+ // Every kWritesPerReset commands triggers recreating the file.
+ const int kWritesPerReset = 250;
+ 
+@@ -279,6 +288,9 @@ void SessionServiceBase::TabInserted(Web
+   }
+   SetTabWindow(session_tab_helper->window_id(),
+                session_tab_helper->session_id());
++  ScheduleCommand(sessions::CreateAddTabExtraDataCommand(
++      session_tab_helper->session_id(), helium::containers::kSessionKey,
++      helium::containers::GetContainerId(contents)));
+   std::string app_id = apps::GetAppIdForWebContents(contents);
+   if (!app_id.empty()) {
+     SetTabExtensionAppID(session_tab_helper->window_id(),
+@@ -292,7 +304,7 @@ void SessionServiceBase::TabInserted(Web
+   // just the default. This in particular will not work for tabs with only
+   // isolated apps which won't have a default partition.
+   content::SessionStorageNamespace* session_storage_namespace =
+-      contents->GetController().GetDefaultSessionStorageNamespace();
++      GetTabSessionStorage(contents);
+   ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
+       session_tab_helper->session_id(), session_storage_namespace->id()));
+   session_storage_namespace->SetShouldPersist(true);
+@@ -308,7 +320,7 @@ void SessionServiceBase::TabClosing(WebC
+   // Allow the associated sessionStorage to get deleted; it won't be needed
+   // in the session restore.
+   content::SessionStorageNamespace* session_storage_namespace =
+-      contents->GetController().GetDefaultSessionStorageNamespace();
++      GetTabSessionStorage(contents);
+   session_storage_namespace->SetShouldPersist(false);
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(contents);
+@@ -614,6 +626,10 @@ void SessionServiceBase::BuildCommandsFo
+   const SessionID session_id(session_tab_helper->session_id());
+   command_storage_manager()->AppendRebuildCommand(
+       sessions::CreateSetTabWindowCommand(window_id, session_id));
++  command_storage_manager()->AppendRebuildCommand(
++      sessions::CreateAddTabExtraDataCommand(
++          session_id, helium::containers::kSessionKey,
++          helium::containers::GetContainerId(tab)));
+ 
+   const int current_index = tab->GetController().GetCurrentEntryIndex();
+   const int min_index =
+@@ -673,7 +689,7 @@ void SessionServiceBase::BuildCommandsFo
+ 
+   // Record the association between the sessionStorage namespace and the tab.
+   content::SessionStorageNamespace* session_storage_namespace =
+-      tab->GetController().GetDefaultSessionStorageNamespace();
++      GetTabSessionStorage(tab);
+   ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
+       session_tab_helper->session_id(), session_storage_namespace->id()));
+ }
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -176,7 +176,10 @@ if (!is_android) {
+ 
+   source_set("browser_actions_impl") {
+     sources = [ "browser_actions.cc" ]
+-    public_deps = [ "//base" ]
++    public_deps = [
++      "//base",
++      "//chrome/browser/containers",
++    ]
+     deps = [
+       ":browser_actions",
+       ":browser_select_file_dialog_controller",
+@@ -309,6 +312,7 @@ source_set("incognito_allowed_url") {
+ }
+ 
+ source_set("browser_ui_prefs") {
++  public_deps = [ "//chrome/browser/containers" ]
+   public = [ "browser_ui_prefs.h" ]
+   sources = [ "browser_ui_prefs.cc" ]
+   deps = [
+@@ -602,6 +606,15 @@ source_set("tab_dialogs") {
+ # modularized, this target should be folded in with //chrome/browser:browser.
+ # The two are already semantically a part of the same target as they allow
+ # circular includes from each other.
++source_set("container_ui") {
++  public = [ "containers/container_ui.h" ]
++  public_deps = [
++    "//base",
++    "//ui/menus",
++    "//url",
++  ]
++}
++
+ static_library("ui") {
+   sources = [
+     "tab_helpers.cc",
+@@ -624,6 +637,7 @@ static_library("ui") {
+     # should be added to //chrome/browser:browser_generated_files.
+     ":accelerator_utils_headers",
+     ":browser_live_tab_context",
++    ":container_ui",
+     ":crypto_module_password_dialog",
+     ":enterprise_startup_dialog",
+     ":screen_capture_notification_ui",
+@@ -682,6 +696,7 @@ static_library("ui") {
+     "//chrome/browser/commerce",
+     "//chrome/browser/complex_tasks",
+     "//chrome/browser/component_updater",
++    "//chrome/browser/containers",
+     "//chrome/browser/content_settings",
+     "//chrome/browser/content_settings:content_settings_factory_impl",
+     "//chrome/browser/content_settings:content_settings_util",
+@@ -850,8 +865,8 @@ static_library("ui") {
+     "//components/lens",
+     "//components/lens:buildflags",
+     "//components/lens:enterprise_policy",
+-    "//components/metrics/debug:resources",
+     "//components/metrics:metrics_pref_names",
++    "//components/metrics/debug:resources",
+     "//components/metrics/private_metrics",
+     "//components/omnibox/browser:vector_icons",
+     "//components/optimization_guide/content/browser",
+@@ -1316,16 +1331,6 @@ static_library("ui") {
+       # that //chrome/browser:browser has no remaining sources. It registers
+       # WebUI interface binders for desktop, which need this target's headers.
+       "//chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc",
+-      "browser_shortcuts/browser_shortcut_metadata.cc",
+-      "browser_shortcuts/browser_shortcut_metadata.h",
+-      "browser_shortcuts/browser_shortcut_prefs.cc",
+-      "browser_shortcuts/browser_shortcut_prefs.h",
+-      "browser_shortcuts/browser_shortcut_serialization.cc",
+-      "browser_shortcuts/browser_shortcut_serialization.h",
+-      "browser_shortcuts/browser_shortcut_service.cc",
+-      "browser_shortcuts/browser_shortcut_service.h",
+-      "browser_shortcuts/browser_shortcut_service_factory.cc",
+-      "browser_shortcuts/browser_shortcut_service_factory.h",
+       "browser.cc",
+       "browser.h",
+       "browser_command_controller.cc",
+@@ -1339,6 +1344,16 @@ static_library("ui") {
+       "browser_manager_service.h",
+       "browser_manager_service_factory.cc",
+       "browser_manager_service_factory.h",
++      "browser_shortcuts/browser_shortcut_metadata.cc",
++      "browser_shortcuts/browser_shortcut_metadata.h",
++      "browser_shortcuts/browser_shortcut_prefs.cc",
++      "browser_shortcuts/browser_shortcut_prefs.h",
++      "browser_shortcuts/browser_shortcut_serialization.cc",
++      "browser_shortcuts/browser_shortcut_serialization.h",
++      "browser_shortcuts/browser_shortcut_service.cc",
++      "browser_shortcuts/browser_shortcut_service.h",
++      "browser_shortcuts/browser_shortcut_service_factory.cc",
++      "browser_shortcuts/browser_shortcut_service_factory.h",
+       "browser_tab_menu_model_delegate.cc",
+       "browser_tab_menu_model_delegate.h",
+       "browser_tab_restorer.cc",
+@@ -1353,6 +1368,7 @@ static_library("ui") {
+       "browser_window_theme_observer.cc",
+       "browser_window_theme_observer.h",
+       "chrome_pages.cc",
++      "containers/container_ui.cc",
+       "intent_picker_tab_helper.cc",
+       "intent_picker_tab_helper.h",
+       "scoped_tabbed_browser_displayer.cc",
+--- a/chrome/browser/ui/accelerator_table.cc
++++ b/chrome/browser/ui/accelerator_table.cc
+@@ -220,6 +220,8 @@ const AcceleratorMapping kAcceleratorMap
+     {ui::VKEY_N, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+      IDC_NEW_INCOGNITO_WINDOW},
+     {ui::VKEY_T, ui::EF_PLATFORM_ACCELERATOR, IDC_NEW_TAB},
++    {ui::VKEY_T, ui::EF_PLATFORM_ACCELERATOR | ui::EF_ALT_DOWN,
++     IDC_NEW_CONTAINER_TAB},
+     {ui::VKEY_N, ui::EF_PLATFORM_ACCELERATOR, IDC_NEW_WINDOW},
+     {ui::VKEY_T, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+      IDC_RESTORE_TAB},
+--- a/chrome/browser/ui/bookmarks/bookmark_context_menu_controller.cc
++++ b/chrome/browser/ui/bookmarks/bookmark_context_menu_controller.cc
+@@ -21,6 +21,7 @@
+ #include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+ #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/enterprise/isolated_mode/isolated_mode_settings_service_factory.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -30,6 +31,7 @@
+ #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -300,6 +302,29 @@ void BookmarkContextMenuController::Buil
+     }
+   }
+ 
++  if (browser_ && helium::containers::IsEnabled(profile_)) {
++    std::vector<GURL> urls;
++    auto collect = [&urls](auto&& self,
++                           const bookmarks::BookmarkNode* node) -> void {
++      if (node->is_url()) {
++        urls.push_back(node->url());
++      } else {
++        for (const auto& child : node->children()) {
++          self(self, child.get());
++        }
++      }
++    };
++    for (const bookmarks::BookmarkNode* node : selection_) {
++      collect(collect, node);
++    }
++    if (!urls.empty()) {
++      container_menu_ =
++          helium::containers::CreateContainerMenu(browser_, std::move(urls));
++      menu_model_->AddSubMenuWithStringId(IDC_OPEN_BOOKMARK_IN_CONTAINER,
++                                          IDS_CONTAINER_OPEN_TABS,
++                                          container_menu_.get());
++    }
++  }
+   AddSeparator();
+   // Permanent folders representation should show the `Rename` option, that will
+   // be disabled.
+@@ -692,6 +717,9 @@ bool BookmarkContextMenuController::IsCo
+ }
+ 
+ bool BookmarkContextMenuController::IsCommandIdEnabled(int command_id) const {
++  if (command_id == IDC_OPEN_BOOKMARK_IN_CONTAINER) {
++    return browser_ && helium::containers::IsEnabled(profile_);
++  }
+   PrefService* prefs = profile_->GetPrefs();
+ 
+   bool is_any_node_permanent = std::ranges::any_of(
+@@ -729,8 +757,8 @@ bool BookmarkContextMenuController::IsCo
+     case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW: {
+       tabs::TabInterface* active_tab =
+           browser_ ? browser_->GetActiveTabInterface() : nullptr;
+-      return bookmarks::HasBookmarkURLs(selection_) &&
+-             active_tab && !active_tab->IsSplit();
++      return bookmarks::HasBookmarkURLs(selection_) && active_tab &&
++             !active_tab->IsSplit();
+     }
+     case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
+       return bookmarks::HasBookmarkURLs(selection_) &&
+--- a/chrome/browser/ui/bookmarks/bookmark_context_menu_controller.h
++++ b/chrome/browser/ui/bookmarks/bookmark_context_menu_controller.h
+@@ -145,6 +145,7 @@ class BookmarkContextMenuController
+   const raw_ptr<BookmarkMergedSurfaceService> bookmark_service_;
+   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
+   std::unique_ptr<ui::SimpleMenuModel> submenu_model_;
++  std::unique_ptr<ui::SimpleMenuModel> container_menu_;
+   const std::unique_ptr<BookmarkParentFolder> new_nodes_parent_;
+   // Whether IDC_PASTE is enabled.
+   const bool can_paste_;
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/contextual_cueing/contextual_cueing_controller.h"
+ #include "chrome/browser/contextual_cueing/features.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_side_panel_coordinator.h"
+@@ -45,6 +46,7 @@
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+ #include "chrome/browser/ui/accelerator_table.h"
+ #include "chrome/browser/ui/autofill/payments/payments_churned_users_bubble_controller.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/interaction/browser_elements.h"
+ #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_manager.h"
+ #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_prefs.h"
+@@ -578,9 +580,8 @@ void BrowserActions::InitializeSidePanel
+                 static_cast<
+                     std::underlying_type_t<actions::ActionPinnableState>>(
+                     actions::ActionPinnableState::kPinnable))
+-            .SetVisible(
+-                contextual_tasks::EntryPointEligibilityManager::
+-                    IsPinningEligible(profile))
++            .SetVisible(contextual_tasks::EntryPointEligibilityManager::
++                            IsPinningEligible(profile))
+             .Build());
+   }
+ 
+@@ -1035,7 +1036,13 @@ void BrowserActions::InitializeChromeMen
+           base::BindRepeating(
+               [](BrowserWindowInterface* bwi, actions::ActionItem* item,
+                  actions::ActionInvocationContext context) {
+-                chrome::NewTab(bwi, NewTabTypes::kNewTabCommand);
++                if (helium::containers::IsEnabled(bwi->GetProfile()) &&
++                    bwi->GetProfile()->GetPrefs()->GetBoolean(
++                        helium::containers::kAskForNewTabPref)) {
++                  helium::containers::ShowContainerPicker(bwi);
++                } else {
++                  chrome::NewTab(bwi, NewTabTypes::kNewTabCommand);
++                }
+               },
+               bwi))
+           .SetActionId(kActionNewTab)
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/defaults.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+ #include "chrome/browser/devtools/features.h"
+@@ -66,6 +67,7 @@
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/bubble_anchor_util.h"
+ #include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/customize_chrome/side_panel_controller.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+ #include "chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.h"
+@@ -537,13 +539,14 @@ bool BrowserCommandController::IsReserve
+   return command_id == IDC_CLOSE_TAB || command_id == IDC_CLOSE_WINDOW ||
+          command_id == IDC_NEW_INCOGNITO_WINDOW ||
+          command_id == IDC_NEW_ISOLATED_WINDOW || command_id == IDC_NEW_TAB ||
+-         command_id == IDC_NEW_WINDOW || command_id == IDC_RESTORE_TAB ||
+-         command_id == IDC_SELECT_NEXT_TAB ||
++         command_id == IDC_NEW_CONTAINER_TAB || command_id == IDC_NEW_WINDOW ||
++         command_id == IDC_RESTORE_TAB || command_id == IDC_SELECT_NEXT_TAB ||
+          command_id == IDC_SELECT_PREVIOUS_TAB ||
+          command_id == IDC_CYCLE_TO_NEXT_TAB ||
+          command_id == IDC_CYCLE_TO_PREV_TAB || command_id == IDC_EXIT ||
+-         command_id == IDC_COPY_OR_INSPECT_SHORTCUT || command_id == IDC_DEV_TOOLS ||
+-         command_id == IDC_DEV_TOOLS_TOGGLE || command_id == IDC_TAB_SEARCH;
++         command_id == IDC_COPY_OR_INSPECT_SHORTCUT ||
++         command_id == IDC_DEV_TOOLS || command_id == IDC_DEV_TOOLS_TOGGLE ||
++         command_id == IDC_TAB_SEARCH;
+ }
+ 
+ void BrowserCommandController::TabStateChanged() {
+@@ -583,7 +586,6 @@ void BrowserCommandController::GlicActiv
+   UpdateGlicState();
+ }
+ 
+-
+ void BrowserCommandController::FindBarVisibilityChanged() {
+   // Block find command updates in locked fullscreen mode unless the instance is
+   // locked for OnTask (only relevant for non-web browser scenarios).
+@@ -643,6 +645,10 @@ bool BrowserCommandController::SupportsC
+ }
+ 
+ bool BrowserCommandController::IsCommandEnabled(int id) const {
++  if (id == IDC_NEW_CONTAINER_TAB &&
++      !helium::containers::IsEnabled(browser_->GetProfile())) {
++    return false;
++  }
+   return command_updater_->IsCommandEnabled(id);
+ }
+ 
+@@ -763,7 +769,19 @@ void BrowserCommandController::HandleCom
+       base::RecordAction(base::UserMetricsAction("CloseWindowByKey"));
+       CloseWindow(browser_);
+       break;
++    case IDC_NEW_CONTAINER_TAB:
++      helium::containers::ShowContainerPicker(browser_);
++      break;
++    case IDC_MANAGE_CONTAINERS:
++      helium::containers::ShowContainerManager(browser_);
++      break;
+     case IDC_NEW_TAB: {
++      if (helium::containers::IsEnabled(profile()) &&
++          profile()->GetPrefs()->GetBoolean(
++              helium::containers::kAskForNewTabPref)) {
++        helium::containers::ShowContainerPicker(browser_);
++        break;
++      }
+       NewTab(browser_, NewTabTypes::kNewTabCommand);
+       break;
+     }
+@@ -1490,9 +1508,8 @@ void BrowserCommandController::HandleCom
+       PrefService* prefs = profile()->GetPrefs();
+       bool copy = prefs->GetBoolean(prefs::kCopyPageUrlShortcut);
+ 
+-      ExecuteCommandWithDisposition(
+-          copy ? IDC_COPY_URL : IDC_DEV_TOOLS_INSPECT, disposition,
+-          std::nullopt, time_stamp);
++      ExecuteCommandWithDisposition(copy ? IDC_COPY_URL : IDC_DEV_TOOLS_INSPECT,
++                                    disposition, std::nullopt, time_stamp);
+       break;
+     }
+     case IDC_CTRL_S_SHORTCUT: {
+@@ -1842,6 +1859,10 @@ void BrowserCommandController::InitComma
+   // Window management commands
+   command_updater_->UpdateCommandEnabled(IDC_CLOSE_WINDOW, true);
+   command_updater_->UpdateCommandEnabled(IDC_NEW_TAB, true);
++  command_updater_->UpdateCommandEnabled(IDC_NEW_CONTAINER_TAB,
++                                         !profile()->IsOffTheRecord());
++  command_updater_->UpdateCommandEnabled(IDC_MANAGE_CONTAINERS,
++                                         !profile()->IsOffTheRecord());
+   command_updater_->UpdateCommandEnabled(IDC_CLOSE_TAB, true);
+   command_updater_->UpdateCommandEnabled(
+       IDC_DUPLICATE_TAB,
+@@ -2394,9 +2415,8 @@ void BrowserCommandController::UpdateCom
+   const bool copy_url_enabled =
+       IsWebAppOrCustomTab(browser_) ||
+       !sharing_hub::SharingIsDisabledByPolicy(browser_->GetProfile());
+-  const bool inspect_enabled =
+-      DevToolsWindow::AllowDevToolsFor(
+-          profile(), browser_->tab_strip_model()->GetActiveWebContents());
++  const bool inspect_enabled = DevToolsWindow::AllowDevToolsFor(
++      profile(), browser_->tab_strip_model()->GetActiveWebContents());
+ 
+   const bool use_copy_shortcut =
+       profile()->GetPrefs()->GetBoolean(prefs::kCopyPageUrlShortcut);
+--- a/chrome/browser/ui/browser_live_tab_context.cc
++++ b/chrome/browser/ui/browser_live_tab_context.cc
+@@ -14,6 +14,7 @@
+ #include "base/uuid.h"
+ #include "base/values.h"
+ #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/glic/glic_tab_restore_helper.h"
+ #include "chrome/browser/performance_manager/public/background_tab_loading_policy.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -175,6 +176,9 @@ void BrowserLiveTabContext::ActivateRest
+ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
+     int index) const {
+   std::map<std::string, std::string> extra_data;
++  extra_data[helium::containers::kSessionKey] =
++      helium::containers::GetContainerId(
++          tab_strip_model_->GetWebContentsAt(index));
+ 
+   glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
+                               &extra_data);
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -11,6 +11,7 @@
+ #include "base/containers/span.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/glic/glic_tab_restore_helper.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/session_restore.h"
+@@ -72,6 +73,23 @@ std::unique_ptr<WebContents> CreateResto
+       content::CreateMapWithDefaultSessionStorageNamespace(
+           browser->GetProfile(), session_storage_namespace);
+   WebContents::CreateParams create_params(browser->GetProfile());
++  const auto container = extra_data.find(helium::containers::kSessionKey);
++  if (container != extra_data.end() && !container->second.empty()) {
++    const GURL restore_url =
++        navigations.empty() ? GURL()
++                            : navigations[selected_navigation].virtual_url();
++    create_params.site_instance = helium::containers::CreateSiteInstance(
++        browser->GetProfile(), restore_url, container->second);
++    session_storage_namespace_map.clear();
++    if (session_storage_namespace &&
++        helium::containers::FindContainer(browser->GetProfile(),
++                                          container->second)) {
++      session_storage_namespace_map.emplace(
++          helium::containers::GetPartitionConfig(browser->GetProfile(),
++                                                 container->second),
++          session_storage_namespace);
++    }
++  }
+   create_params.initially_hidden = initially_hidden;
+   create_params.desired_renderer_state =
+       WebContents::CreateParams::kNoRendererProcess;
+@@ -299,9 +317,9 @@ WebContents* AddRestoredTab(
+       last_active_time_ticks, last_active_time, session_storage_namespace,
+       user_agent_override, extra_data, initially_hidden, from_session_restore);
+ 
+-  return AddRestoredTabImpl(
+-      std::move(web_contents), browser, tab_index, group, select, pin,
+-      from_session_restore, is_active_browser, load_policy);
++  return AddRestoredTabImpl(std::move(web_contents), browser, tab_index, group,
++                            select, pin, from_session_restore,
++                            is_active_browser, load_policy);
+ }
+ 
+ WebContents* ReplaceRestoredTab(
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -10,6 +10,7 @@
+ #include "base/numerics/safe_conversions.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+@@ -114,6 +115,7 @@ void RegisterBrowserPrefs(PrefRegistrySi
+ }
+ 
+ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
++  helium::containers::RegisterProfilePrefs(registry);
+ #if BUILDFLAG(IS_ANDROID)
+   const uint32_t pref_registration_flags = PrefRegistry::NO_REGISTRATION_FLAGS;
+ #else
+@@ -188,8 +190,9 @@ void RegisterBrowserUserPrefs(user_prefs
+   registry->RegisterBooleanPref(prefs::kPrintPreviewUseSystemDefaultPrinter,
+                                 false);
+ #endif
+-  registry->RegisterStringPref(prefs::kWebRTCIPHandlingPolicy,
+-                               blink::kWebRTCIPHandlingDefaultPublicInterfaceOnly);
++  registry->RegisterStringPref(
++      prefs::kWebRTCIPHandlingPolicy,
++      blink::kWebRTCIPHandlingDefaultPublicInterfaceOnly);
+   registry->RegisterListPref(prefs::kWebRTCIPHandlingUrl, base::ListValue());
+   registry->RegisterBooleanPref(prefs::kWebRTCPostQuantumKeyAgreement, false);
+   registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -139,6 +139,12 @@ NSMenuItem* BuildFileMenu(NSApplication*
+               Item(IDS_NEW_TAB_MAC)
+                   .command_id(IDC_NEW_TAB)
+                   .remove_if(is_pwa),
++              Item(IDS_CONTAINER_NEW_TAB)
++                  .command_id(IDC_NEW_CONTAINER_TAB)
++                  .remove_if(is_pwa),
++              Item(IDS_CONTAINER_MANAGE)
++                  .command_id(IDC_MANAGE_CONTAINERS)
++                  .remove_if(is_pwa),
+               Item(IDS_NEW_WINDOW_MAC)
+                   .command_id(IDC_NEW_WINDOW),
+               Item(IDS_NEW_INCOGNITO_WINDOW_MAC)
+@@ -460,7 +466,6 @@ NSMenuItem* BuildBookmarksMenu(NSApplica
+   return item;
+ }
+ 
+-
+ NSMenuItem* BuildPeopleMenu(NSApplication* nsapp,
+                             id app_delegate,
+                             const std::u16string& product_name,
+--- /dev/null
++++ b/chrome/browser/ui/containers/container_ui.cc
+@@ -0,0 +1,569 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/containers/container_ui.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/memory/raw_ptr.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_ui.h"
++#include "content/public/browser/web_ui_data_source.h"
++#include "content/public/browser/web_ui_message_handler.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/views/controls/button/checkbox.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace helium::containers {
++namespace {
++
++std::u16string Text(int id) {
++  return l10n_util::GetStringUTF16(id);
++}
++
++void ShowDialog(BrowserWindowInterface* browser,
++                std::unique_ptr<views::DialogDelegate> dialog) {
++  const auto native_window = browser->GetWindow()->GetNativeWindow();
++  auto* parent = views::Widget::GetWidgetForNativeWindow(native_window);
++  if (!parent) {
++    return;
++  }
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  views::DialogDelegate::CreateDialogWidget(std::move(dialog), native_window,
++                                            parent->GetNativeView())
++      ->Show();
++}
++
++void SetLayout(views::View* view) {
++  view->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 12));
++}
++
++std::vector<content::WebContents*> GetOpenTabs(Profile* profile,
++                                               const std::string& id) {
++  std::vector<content::WebContents*> result;
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [&](BrowserWindowInterface* b) {
++        if (b->GetProfile() == profile) {
++          auto* model = b->GetTabStripModel();
++          for (int i = 0; i < model->count(); ++i) {
++            auto* contents = model->GetWebContentsAt(i);
++            const auto tab_id = GetContainerId(contents);
++            if (!tab_id.empty() && (id.empty() || tab_id == id)) {
++              result.push_back(contents);
++            }
++          }
++        }
++        return true;
++      });
++  return result;
++}
++
++void CloseContainerTabs(Profile* profile, const std::string& id) {
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [&](BrowserWindowInterface* b) {
++        if (b->GetProfile() == profile) {
++          auto* model = b->GetTabStripModel();
++          bool all_in_container = model->count() > 0;
++          for (int i = 0; i < model->count(); ++i) {
++            const auto tab_id = GetContainerId(model->GetWebContentsAt(i));
++            if (tab_id.empty() || (!id.empty() && tab_id != id)) {
++              all_in_container = false;
++            }
++          }
++          if (all_in_container) {
++            OpenInContainer(b, {}, {});
++          }
++          for (int i = model->count() - 1; i >= 0; --i) {
++            const auto tab_id = GetContainerId(model->GetWebContentsAt(i));
++            if (!tab_id.empty() && (id.empty() || tab_id == id)) {
++              model->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
++            }
++          }
++        }
++        return true;
++      });
++}
++
++views::Combobox* AddCombo(views::View* view,
++                          int label_id,
++                          std::vector<std::u16string> choices,
++                          size_t selected) {
++  view->AddChildView(std::make_unique<views::Label>(Text(label_id)));
++  std::vector<ui::SimpleComboboxModel::Item> items;
++  for (auto& choice : choices) {
++    items.emplace_back(std::move(choice));
++  }
++  auto* combo = view->AddChildView(std::make_unique<views::Combobox>(
++      std::make_unique<ui::SimpleComboboxModel>(std::move(items))));
++  combo->SetAccessibleName(Text(label_id));
++  combo->SetSelectedIndex(selected);
++  return combo;
++}
++
++void ShowEditor(BrowserWindowInterface* browser, std::string id) {
++  auto container = FindContainer(browser->GetProfile(), id);
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  auto* contents = dialog->SetContentsView(std::make_unique<views::View>());
++  dialog->SetTitle(Text(container ? IDS_CONTAINER_EDIT : IDS_CONTAINER_ADD));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                         Text(IDS_CONTAINER_SAVE));
++  contents->SetPreferredSize(gfx::Size(400, 330));
++  SetLayout(contents);
++  contents->AddChildView(
++      std::make_unique<views::Label>(Text(IDS_CONTAINER_NAME)));
++  auto* name = contents->AddChildView(std::make_unique<views::Textfield>());
++  name->SetAccessibleName(Text(IDS_CONTAINER_NAME));
++  if (container) {
++    name->SetText(container->name);
++  }
++  dialog->SetInitiallyFocusedView(name);
++  auto* color =
++      AddCombo(contents, IDS_CONTAINER_COLOR,
++               {Text(IDS_CONTAINER_BLUE), Text(IDS_CONTAINER_ORANGE),
++                Text(IDS_CONTAINER_GREEN), Text(IDS_CONTAINER_PINK),
++                Text(IDS_CONTAINER_PURPLE), Text(IDS_CONTAINER_RED),
++                Text(IDS_CONTAINER_TURQUOISE), Text(IDS_CONTAINER_GRAY)},
++               container ? container->color : 0);
++  auto* icon = AddCombo(contents, IDS_CONTAINER_ICON,
++                        {GetIcon(0), GetIcon(1), GetIcon(2), GetIcon(3),
++                         GetIcon(4), GetIcon(5), GetIcon(6), GetIcon(7)},
++                        container ? container->icon : 0);
++  auto* error = contents->AddChildView(std::make_unique<views::Label>());
++  error->SetMultiLine(true);
++  dialog->SetAcceptCallbackWithClose(base::BindRepeating(
++      [](base::WeakPtr<BrowserWindowInterface> browser, std::string id,
++         views::Textfield* name, views::Combobox* color, views::Combobox* icon,
++         views::Label* error) {
++        if (!browser) {
++          return true;
++        }
++        if (!SaveContainer(browser->GetProfile(), id,
++                           std::u16string(name->GetText()),
++                           color->GetSelectedIndex().value_or(0),
++                           icon->GetSelectedIndex().value_or(0))) {
++          error->SetText(Text(IDS_CONTAINER_INVALID_NAME));
++          name->RequestFocus();
++          return false;
++        }
++        return true;
++      },
++      browser->GetWeakPtr(), std::move(id), name, color, icon, error));
++  ShowDialog(browser, std::move(dialog));
++}
++
++void ConfirmRemoval(BrowserWindowInterface* browser, std::string id) {
++  const auto container = FindContainer(browser->GetProfile(), id);
++  if (!container) {
++    return;
++  }
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  auto* contents = dialog->SetContentsView(std::make_unique<views::View>());
++  dialog->SetTitle(Text(IDS_CONTAINER_DELETE));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                         Text(IDS_CONTAINER_DELETE));
++  SetLayout(contents);
++  auto* message = contents->AddChildView(
++      std::make_unique<views::Label>(l10n_util::GetStringFUTF16(
++          IDS_CONTAINER_DELETE_CONFIRM, container->name)));
++  message->SetMultiLine(true);
++  message->SetMaximumWidth(400);
++  dialog->SetAcceptCallbackWithClose(base::BindRepeating(
++      [](base::WeakPtr<BrowserWindowInterface> browser, std::string id,
++         views::Label* message) {
++        if (!browser) {
++          return true;
++        }
++        auto* profile = browser->GetProfile();
++        CloseContainerTabs(profile, id);
++        // Respect pages with beforeunload handlers. Never clear a live tab's
++        // partition, or it could recreate data after the deletion completes.
++        if (!GetOpenTabs(profile, id).empty()) {
++          message->SetText(Text(IDS_CONTAINER_CLOSE_PENDING));
++          return false;
++        }
++        RemoveContainer(profile, id);
++        return true;
++      },
++      browser->GetWeakPtr(), std::move(id), message));
++  ShowDialog(browser, std::move(dialog));
++}
++
++class ContainerManager : public views::View {
++  METADATA_HEADER(ContainerManager, views::View)
++
++ public:
++  ContainerManager(BrowserWindowInterface* browser,
++                   views::DialogDelegate* dialog)
++      : browser_(browser->GetWeakPtr()) {
++    dialog->SetTitle(Text(IDS_CONTAINER_MANAGE));
++    dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk));
++    dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                           Text(IDS_CONTAINER_DONE));
++    SetPreferredSize(gfx::Size(480, 520));
++    SetLayout(this);
++    auto* enabled = AddChildView(
++        std::make_unique<views::Checkbox>(Text(IDS_CONTAINER_ENABLED)));
++    enabled->SetChecked(IsEnabled(browser->GetProfile()));
++    enabled->SetCallback(base::BindRepeating(
++        [](base::WeakPtr<BrowserWindowInterface> browser,
++           views::Checkbox* checkbox) {
++          if (browser) {
++            // Existing tabs keep their partitions when creation is disabled.
++            browser->GetProfile()->GetPrefs()->SetBoolean(
++                kEnabledPref, checkbox->GetChecked());
++          }
++        },
++        browser_, enabled));
++    auto* ask = AddChildView(
++        std::make_unique<views::Checkbox>(Text(IDS_CONTAINER_ASK_NEW_TAB)));
++    ask->SetChecked(
++        browser->GetProfile()->GetPrefs()->GetBoolean(kAskForNewTabPref));
++    ask->SetCallback(base::BindRepeating(
++        [](base::WeakPtr<BrowserWindowInterface> browser,
++           views::Checkbox* checkbox) {
++          if (browser) {
++            browser->GetProfile()->GetPrefs()->SetBoolean(
++                kAskForNewTabPref, checkbox->GetChecked());
++          }
++        },
++        browser_, ask));
++    auto* scroll = AddChildView(std::make_unique<views::ScrollView>());
++    scroll->ClipHeightTo(0, 340);
++    rows_ = scroll->SetContents(std::make_unique<views::View>());
++    SetLayout(rows_);
++    AddChildView(std::make_unique<views::MdTextButton>(
++        base::BindRepeating(
++            [](base::WeakPtr<BrowserWindowInterface> browser) {
++              if (browser) {
++                ShowEditor(browser.get(), {});
++              }
++            },
++            browser_),
++        Text(IDS_CONTAINER_ADD)));
++    registrar_.Init(browser->GetProfile()->GetPrefs());
++    registrar_.Add(kContainersPref,
++                   base::BindRepeating(&ContainerManager::ScheduleRebuild,
++                                       weak_factory_.GetWeakPtr()));
++    Rebuild();
++  }
++
++ private:
++  void ScheduleRebuild() {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ContainerManager::Rebuild, weak_factory_.GetWeakPtr()));
++  }
++
++  void Rebuild() {
++    if (!browser_) {
++      return;
++    }
++    rows_->RemoveAllChildViews();
++    for (const auto& container : GetContainers(browser_->GetProfile())) {
++      auto* row = rows_->AddChildView(std::make_unique<views::View>());
++      auto* layout = row->SetLayoutManager(std::make_unique<views::BoxLayout>(
++          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 12));
++      auto* name = row->AddChildView(std::make_unique<views::Label>(
++          GetIcon(container.icon) + u" " + container.name));
++      name->SetEnabledColor(GetColor(container.color));
++      name->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++      layout->SetFlexForView(name, 1);
++      row->AddChildView(std::make_unique<views::MdTextButton>(
++          base::BindRepeating(
++              [](base::WeakPtr<BrowserWindowInterface> browser,
++                 std::string id) {
++                if (browser) {
++                  ShowEditor(browser.get(), std::move(id));
++                }
++              },
++              browser_, container.id),
++          Text(IDS_CONTAINER_EDIT)));
++      row->AddChildView(std::make_unique<views::MdTextButton>(
++          base::BindRepeating(
++              [](base::WeakPtr<BrowserWindowInterface> browser,
++                 std::string id) {
++                if (browser) {
++                  ConfirmRemoval(browser.get(), std::move(id));
++                }
++              },
++              browser_, container.id),
++          Text(IDS_CONTAINER_DELETE)));
++    }
++    PreferredSizeChanged();
++  }
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  raw_ptr<views::View> rows_ = nullptr;
++  PrefChangeRegistrar registrar_;
++  base::WeakPtrFactory<ContainerManager> weak_factory_{this};
++};
++
++BEGIN_METADATA(ContainerManager)
++END_METADATA
++
++class ContainerWebUIHandler : public content::WebUIMessageHandler {
++ public:
++  void RegisterMessages() override {
++    web_ui()->RegisterMessageCallback(
++        "openInContainer", base::BindRepeating(&ContainerWebUIHandler::Open,
++                                               base::Unretained(this)));
++    web_ui()->RegisterMessageCallback(
++        "manageContainers", base::BindRepeating(&ContainerWebUIHandler::Manage,
++                                                base::Unretained(this)));
++  }
++
++ private:
++  void Open(const base::ListValue& args) {
++    auto* browser =
++        webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++    if (!browser || args.size() != 1 || !args[0].is_list()) {
++      return;
++    }
++    std::vector<GURL> urls;
++    for (const auto& value : args[0].GetList()) {
++      if (!value.is_string()) {
++        return;
++      }
++      GURL url(value.GetString());
++      if (!url.is_valid() ||
++          !(url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile() ||
++            url.SchemeIs("chrome") || url.IsAboutBlank())) {
++        return;
++      }
++      urls.push_back(std::move(url));
++    }
++    if (!urls.empty()) {
++      ShowContainerPicker(browser, std::move(urls));
++    }
++  }
++
++  void Manage(const base::ListValue& args) {
++    if (auto* browser =
++            webui::GetBrowserWindowInterface(web_ui()->GetWebContents())) {
++      ShowContainerManager(browser);
++    }
++  }
++};
++
++class ContainerMenu : public ui::SimpleMenuModel,
++                      public ui::SimpleMenuModel::Delegate {
++ public:
++  ContainerMenu(BrowserWindowInterface* browser,
++                std::vector<GURL> urls,
++                std::vector<base::WeakPtr<content::WebContents>> reopen)
++      : ui::SimpleMenuModel(this),
++        browser_(browser->GetWeakPtr()),
++        urls_(std::move(urls)),
++        reopen_(std::move(reopen)),
++        containers_(GetContainers(browser->GetProfile())) {
++    AddItem(IDC_CONTAINER_DEFAULT, Text(IDS_CONTAINER_NONE));
++    for (size_t i = 0; i < containers_.size(); ++i) {
++      const auto& container = containers_[i];
++      AddItemWithIcon(IDC_CONTAINER_FIRST + i,
++                      GetIcon(container.icon) + u" " + container.name,
++                      ui::ImageModel::FromVectorIcon(
++                          kTabIcon, GetColor(container.color), 16));
++    }
++    AddSeparator(ui::NORMAL_SEPARATOR);
++    AddItem(IDC_MANAGE_CONTAINERS, Text(IDS_CONTAINER_MANAGE));
++  }
++
++  bool IsCommandIdEnabled(int command_id) const override {
++    return browser_ && (command_id == IDC_MANAGE_CONTAINERS ||
++                        command_id == IDC_CONTAINER_DEFAULT ||
++                        IsEnabled(browser_->GetProfile()));
++  }
++
++  void ExecuteCommand(int command_id, int event_flags) override {
++    if (!browser_) {
++      return;
++    }
++    if (command_id == IDC_MANAGE_CONTAINERS) {
++      ShowContainerManager(browser_.get());
++      return;
++    }
++    std::string id;
++    if (command_id != IDC_CONTAINER_DEFAULT) {
++      const int index = command_id - IDC_CONTAINER_FIRST;
++      if (index < 0 || index >= static_cast<int>(containers_.size()) ||
++          !IsEnabled(browser_->GetProfile())) {
++        return;
++      }
++      id = containers_[index].id;
++      if (!FindContainer(browser_->GetProfile(), id)) {
++        return;
++      }
++    }
++    if (reopen_.empty()) {
++      OpenInContainer(browser_.get(), urls_, id);
++      return;
++    }
++    // Snapshot weak pointers, never tab indices, because opening a new tab can
++    // change the positions of every following tab.
++    for (const auto& original : reopen_) {
++      if (!original || GetContainerId(original.get()) == id) {
++        continue;
++      }
++      auto* model = browser_->GetTabStripModel();
++      if (model->GetIndexOfWebContents(original.get()) ==
++          TabStripModel::kNoTab) {
++        continue;
++      }
++      const int old_index = model->GetIndexOfWebContents(original.get());
++      const bool pinned = model->IsTabPinned(old_index);
++      const auto group = model->GetTabGroupForTab(old_index);
++      if (!OpenInContainer(browser_.get(), {original->GetVisibleURL()}, id)) {
++        continue;
++      }
++      int new_index = model->active_index();
++      new_index = model->SetTabPinned(new_index, pinned);
++      model->MoveWebContentsAt(new_index, old_index, true);
++      if (group && model->group_model()->ContainsTabGroup(*group)) {
++        model->AddToExistingGroup({model->active_index()}, *group);
++      }
++      const int index = model->GetIndexOfWebContents(original.get());
++      if (index != TabStripModel::kNoTab) {
++        model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
++      }
++    }
++  }
++
++ private:
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  std::vector<GURL> urls_;
++  std::vector<base::WeakPtr<content::WebContents>> reopen_;
++  std::vector<Container> containers_;
++};
++
++}  // namespace
++
++bool OpenInContainer(BrowserWindowInterface* browser,
++                     const std::vector<GURL>& urls,
++                     const std::string& id) {
++  if (!browser || browser->GetProfile()->IsOffTheRecord() ||
++      (!id.empty() && (!IsEnabled(browser->GetProfile()) ||
++                       !FindContainer(browser->GetProfile(), id)))) {
++    return false;
++  }
++  const std::vector<GURL> targets =
++      urls.empty() ? std::vector<GURL>{GURL(chrome::kChromeUINewTabURL)} : urls;
++  bool first = true;
++  bool opened = false;
++  for (const auto& url : targets) {
++    // Never execute a bookmarklet in another container or carry an origin-bound
++    // blob/filesystem URL into a different identity.
++    if (!url.is_valid() || url.SchemeIs("javascript") || url.SchemeIs("blob") ||
++        url.SchemeIsFileSystem()) {
++      continue;
++    }
++    NavigateParams params(browser, url, ui::PAGE_TRANSITION_LINK);
++    params.container_id = id;
++    params.disposition = first ? WindowOpenDisposition::NEW_FOREGROUND_TAB
++                               : WindowOpenDisposition::NEW_BACKGROUND_TAB;
++    params.window_action = NavigateParams::WindowAction::kShowWindow;
++    Navigate(&params);
++    opened |= params.navigated_or_inserted_contents != nullptr;
++    first = false;
++  }
++  return opened;
++}
++
++void ShowContainerPicker(BrowserWindowInterface* browser,
++                         std::vector<GURL> urls) {
++  if (!browser || !IsEnabled(browser->GetProfile())) {
++    return;
++  }
++  const auto containers = GetContainers(browser->GetProfile());
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  auto* contents = dialog->SetContentsView(std::make_unique<views::View>());
++  dialog->SetTitle(Text(IDS_CONTAINER_NEW_TAB));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                         Text(IDS_CONTAINER_OPEN));
++  contents->SetPreferredSize(gfx::Size(400, 160));
++  SetLayout(contents);
++  std::vector<std::u16string> choices = {Text(IDS_CONTAINER_NONE)};
++  for (const auto& container : containers) {
++    choices.push_back(GetIcon(container.icon) + u" " + container.name);
++  }
++  auto* combo = AddCombo(contents, IDS_CONTAINER_CHOOSE, std::move(choices),
++                         containers.empty() ? 0 : 1);
++  dialog->SetInitiallyFocusedView(combo);
++  dialog->SetAcceptCallback(base::BindOnce(
++      [](base::WeakPtr<BrowserWindowInterface> browser, std::vector<GURL> urls,
++         std::vector<Container> containers, views::Combobox* combo) {
++        if (browser) {
++          const size_t index = combo->GetSelectedIndex().value_or(0);
++          OpenInContainer(
++              browser.get(), urls,
++              index == 0 ? std::string() : containers[index - 1].id);
++        }
++      },
++      browser->GetWeakPtr(), std::move(urls), containers, combo));
++  dialog->SetExtraView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(
++          [](base::WeakPtr<BrowserWindowInterface> browser) {
++            if (browser) {
++              ShowContainerManager(browser.get());
++            }
++          },
++          browser->GetWeakPtr()),
++      Text(IDS_CONTAINER_MANAGE)));
++  ShowDialog(browser, std::move(dialog));
++}
++
++void RegisterContainerWebUI(content::WebUI* web_ui,
++                            content::WebUIDataSource* source) {
++  source->AddLocalizedString("openInContainer", IDS_CONTAINER_OPEN_TABS);
++  source->AddLocalizedString("containerManage", IDS_CONTAINER_MANAGE);
++  source->AddBoolean("containersAvailable",
++                     IsEnabled(Profile::FromWebUI(web_ui)));
++  web_ui->AddMessageHandler(std::make_unique<ContainerWebUIHandler>());
++}
++
++void ShowContainerManager(BrowserWindowInterface* browser) {
++  if (browser && !browser->GetProfile()->IsOffTheRecord()) {
++    auto dialog = std::make_unique<views::DialogDelegate>();
++    dialog->SetContentsView(
++        std::make_unique<ContainerManager>(browser, dialog.get()));
++    ShowDialog(browser, std::move(dialog));
++  }
++}
++
++std::unique_ptr<ui::SimpleMenuModel> CreateContainerMenu(
++    BrowserWindowInterface* browser,
++    std::vector<GURL> urls,
++    std::vector<base::WeakPtr<content::WebContents>> reopen) {
++  return std::make_unique<ContainerMenu>(browser, std::move(urls),
++                                         std::move(reopen));
++}
++
++}  // namespace helium::containers
+--- /dev/null
++++ b/chrome/browser/ui/containers/container_ui.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_CONTAINERS_CONTAINER_UI_H_
++#define CHROME_BROWSER_UI_CONTAINERS_CONTAINER_UI_H_
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/memory/weak_ptr.h"
++#include "ui/menus/simple_menu_model.h"
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++namespace content {
++class WebContents;
++class WebUI;
++class WebUIDataSource;
++}  // namespace content
++
++namespace helium::containers {
++
++// The same picker is used by keyboard commands and WebUI tab-opening actions.
++void ShowContainerPicker(BrowserWindowInterface* browser,
++                         std::vector<GURL> urls = {});
++void ShowContainerManager(BrowserWindowInterface* browser);
++void RegisterContainerWebUI(content::WebUI* web_ui,
++                            content::WebUIDataSource* source);
++bool OpenInContainer(BrowserWindowInterface* browser,
++                     const std::vector<GURL>& urls,
++                     const std::string& id);
++
++// Each owner keeps its submenu alive for the lifetime of the parent menu.
++// Reopen targets are weak, since pages can close while a menu is open.
++std::unique_ptr<ui::SimpleMenuModel> CreateContainerMenu(
++    BrowserWindowInterface* browser,
++    std::vector<GURL> urls = {},
++    std::vector<base::WeakPtr<content::WebContents>> reopen = {});
++
++}  // namespace helium::containers
++
++#endif  // CHROME_BROWSER_UI_CONTAINERS_CONTAINER_UI_H_
+--- a/chrome/browser/ui/navigator/BUILD.gn
++++ b/chrome/browser/ui/navigator/BUILD.gn
+@@ -49,6 +49,7 @@ source_set("impl") {
+     "//chrome/browser:browser_about_handler",
+     "//chrome/browser:browser_public_dependencies",
+     "//chrome/browser:primitives",
++    "//chrome/browser/containers",
+     "//chrome/browser/picture_in_picture",
+     "//chrome/browser/prefs",
+     "//chrome/browser/profiles:profile",
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
+ #include "chrome/browser/apps/link_capturing/link_capturing_tab_data.h"
+ #include "chrome/browser/browser_about_handler.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+@@ -550,6 +551,15 @@ std::unique_ptr<content::WebContents> Cr
+                     : tab_util::GetSiteInstanceForNewTab(
+                           params.browser->GetProfile(), url);
+ 
++  const std::string container_id = params.container_id.value_or(std::string());
++  if (!params.opener && !container_id.empty() &&
++      !params.browser->GetProfile()->IsOffTheRecord()) {
++    // A new BrowsingInstance retains this partition even after cross-site
++    // navigations and renderer-initiated windows with noopener.
++    initial_site_instance_for_new_contents =
++        helium::containers::CreateSiteInstance(params.browser->GetProfile(),
++                                               url, container_id);
++  }
+   WebContents::CreateParams create_params(
+       params.browser->GetProfile(), initial_site_instance_for_new_contents);
+   create_params.main_frame_name = params.frame_name;
+@@ -754,6 +764,43 @@ base::WeakPtr<content::NavigationHandle>
+     }
+   }
+ 
++  // An explicit identity change must create a fresh browsing context. Never
++  // carry an opener, initiator, or referrer across the storage boundary.
++  if (params->container_id.has_value()) {
++    content::WebContents* source =
++        params->opener
++            ? content::WebContents::FromRenderFrameHost(params->opener)
++            : params->source_contents.get();
++    if (source &&
++        helium::containers::GetContainerId(source) != *params->container_id) {
++      params->opener = nullptr;
++      params->source_site_instance = nullptr;
++      params->initiator_frame_token.reset();
++      params->initiator_process_id =
++          content::ChildProcessHost::kInvalidUniqueID;
++      params->initiator_origin.reset();
++      params->initiator_base_url.reset();
++      params->initiator_navigation_state = nullptr;
++      params->referrer = content::Referrer();
++      params->frame_name.clear();
++      params->frame_tree_node_id = content::FrameTreeNodeId();
++      params->opened_by_another_window = false;
++      params->is_renderer_initiated = false;
++      if (params->disposition == WindowOpenDisposition::CURRENT_TAB) {
++        params->disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++      }
++    }
++  }
++
++  if (!params->container_id.has_value()) {
++    params->container_id =
++        helium::containers::GetContainerId(params->source_contents);
++    if (params->opener) {
++      params->container_id = helium::containers::GetContainerId(
++          content::WebContents::FromRenderFrameHost(params->opener));
++    }
++  }
++
+   // If no source WebContents was specified, we use the selected one from the
+   // target browser. This must happen before GetBrowserAndTabForDisposition()
+   // has a chance to replace |params->browser| with another one, but after the
+--- a/chrome/browser/ui/navigator/browser_navigator_params.h
++++ b/chrome/browser/ui/navigator/browser_navigator_params.h
+@@ -97,6 +97,10 @@ struct NavigateParams {
+   void FillNavigateParamsFromOpenURLParams(
+       const content::OpenURLParams& params);
+ 
++  // nullopt inherits an explicit source tab. Empty string explicitly opens
++  // outside containers. A nonempty value selects a fixed storage partition.
++  std::optional<std::string> container_id;
++
+   // The URL/referrer to be loaded. Ignored if |contents_to_insert| is non-NULL.
+   GURL url;
+   content::Referrer referrer;
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -149,7 +149,11 @@ if (!is_android) {
+   }
+ 
+   source_set("tab_menu_impl") {
+-    public_deps = [ "//chrome/browser:browser_public_dependencies" ]
++    public_deps = [
++      "//chrome/browser:browser_public_dependencies",
++      "//chrome/browser/containers",
++      "//chrome/browser/ui:container_ui",
++    ]
+ 
+     sources = [
+       "glic_tab_sub_menu_model.cc",
+@@ -372,6 +376,7 @@ if (!is_android) {
+       ":tabs",
+       "//chrome/app:command_ids",
+       "//chrome/browser/commerce",
++      "//chrome/browser/containers",
+       "//chrome/browser/content_settings:content_settings_factory",
+       "//chrome/browser/extensions",
+       "//chrome/browser/glic",
+@@ -381,6 +386,7 @@ if (!is_android) {
+       "//chrome/browser/resource_coordinator",
+       "//chrome/browser/ui:browser_tab_strip",
+       "//chrome/browser/ui:browser_tab_strip_tracker",
++      "//chrome/browser/ui:container_ui",
+       "//chrome/browser/ui:tab_ui_helper",
+       "//chrome/browser/ui:ui_features",
+       "//chrome/browser/ui/browser_window",
+@@ -458,6 +464,7 @@ if (!is_android) {
+       "//components/collaboration/public",
+       "//components/keyed_service/core",
+       "//components/optimization_guide/content/browser:page_context_eligibility",
++      "//components/prefs",
+       "//components/tabs:public",
+       "//content/public/browser",
+       "//skia",
+@@ -480,6 +487,7 @@ if (!is_android) {
+     public_deps = [
+       ":page_context_eligibility_helper",
+       "//chrome/browser:browser_public_dependencies",
++      "//chrome/browser/containers",
+       "//chrome/browser/loader",
+     ]
+ 
+--- a/chrome/browser/ui/tabs/tab_data.cc
++++ b/chrome/browser/ui/tabs/tab_data.cc
+@@ -10,6 +10,8 @@
+ #include "base/functional/bind.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "chrome/browser/collaboration/messaging/messaging_backend_service_factory.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+@@ -21,10 +23,12 @@
+ #include "chrome/browser/ui/tabs/tab_utils.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_image.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
++#include "chrome/grit/generated_resources.h"
+ #include "components/collaboration/public/messaging/messaging_backend_service.h"
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ namespace tabs {
+ 
+@@ -35,6 +39,21 @@ TabData TabData::FromTabInterface(tabs::
+ 
+   TabData tab_data;
+   tab_data.title = tab_ui_helper->GetTitle();
++  const auto container_id =
++      helium::containers::GetContainerId(tab_interface->GetContents());
++  if (!container_id.empty()) {
++    const auto container = helium::containers::FindContainer(
++        Profile::FromBrowserContext(
++            tab_interface->GetContents()->GetBrowserContext()),
++        container_id);
++    const auto name = container
++                          ? helium::containers::GetIcon(container->icon) +
++                                u" " + container->name
++                          : l10n_util::GetStringUTF16(IDS_CONTAINER_DELETED);
++    tab_data.title = name + u" | " + tab_data.title;
++    tab_data.container_color =
++        helium::containers::GetColor(container ? container->color : 7);
++  }
+   tab_data.should_render_loading_title =
+       tab_ui_helper->ShouldRenderLoadingTitle();
+   tab_data.should_themify_favicon = tab_ui_helper->ShouldThemifyFavicon();
+@@ -86,7 +105,7 @@ TabData& TabData::operator=(const TabDat
+ TabData& TabData::operator=(TabData&& other) = default;
+ 
+ bool TabData::operator==(const TabData& other) const {
+-  return title == other.title &&
++  return title == other.title && container_color == other.container_color &&
+          should_render_loading_title == other.should_render_loading_title &&
+          should_themify_favicon == other.should_themify_favicon &&
+          should_display_favicon == other.should_display_favicon &&
+@@ -111,6 +130,12 @@ bool TabData::operator==(const TabData&
+ TabDataObserver::TabDataObserver(TabInterface* tab_interface)
+     : tab_interface_(tab_interface) {
+   CHECK(tab_interface_);
++  container_prefs_.Init(Profile::FromBrowserContext(
++                            tab_interface_->GetContents()->GetBrowserContext())
++                            ->GetPrefs());
++  container_prefs_.Add(helium::containers::kContainersPref,
++                       base::BindRepeating(&TabDataObserver::OnTabUIChange,
++                                           base::Unretained(this)));
+   TabUIHelper* const tab_ui_helper = TabUIHelper::From(tab_interface);
+   tab_ui_change_subscription_ =
+       tab_ui_helper->AddTabUIChangeCallback(base::BindRepeating(
+--- a/chrome/browser/ui/tabs/tab_data.h
++++ b/chrome/browser/ui/tabs/tab_data.h
+@@ -13,6 +13,7 @@
+ #include "base/observer_list.h"
+ #include "chrome/browser/ui/tabs/contents_observing_tab_feature.h"
+ #include "chrome/browser/ui/tabs/tab_change_type.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_network_state.h"
+ #include "ui/base/models/image_model.h"
+@@ -46,6 +47,7 @@ struct TabData {
+ 
+   // TabUIHelper properties:
+   std::u16string title;
++  std::optional<SkColor> container_color;
+   bool should_render_loading_title = false;
+   bool should_themify_favicon = false;
+   bool should_display_favicon = true;
+@@ -105,6 +107,7 @@ class TabDataObserver {
+                      tabs::TabInterface::DetachReason reason);
+   void OnResourceUsageChanged(scoped_refptr<const ::TabResourceUsage> usage);
+ 
++  PrefChangeRegistrar container_prefs_;
+   TabData tab_data_;
+ 
+   raw_ptr<tabs::TabInterface> tab_interface_;
+--- a/chrome/browser/ui/tabs/tab_menu_model.cc
++++ b/chrome/browser/ui/tabs/tab_menu_model.cc
+@@ -16,6 +16,7 @@
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/glic/browser_ui/glic_vector_icon_manager.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
+ #include "chrome/browser/glic/public/glic_keyed_service.h"
+@@ -28,6 +29,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+ #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_context_menu_delegate.h"
+ #include "chrome/browser/ui/tabs/existing_tab_group_sub_menu_model.h"
+@@ -321,6 +323,21 @@ void TabMenuModel::Build(int index) {
+   }
+ 
+   int num_tabs = indices.size();
++  auto* container_browser = tab_strip_->delegate()->GetBrowserWindowInterface();
++  if (container_browser && !container_browser->GetProfile()->IsOffTheRecord()) {
++    container_menu_ =
++        helium::containers::CreateContainerMenu(container_browser);
++    AddSubMenuWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB,
++                           container_menu_.get());
++    std::vector<base::WeakPtr<content::WebContents>> reopen;
++    for (int i : indices) {
++      reopen.push_back(tab_strip_->GetWebContentsAt(i)->GetWeakPtr());
++    }
++    reopen_container_menu_ = helium::containers::CreateContainerMenu(
++        container_browser, {}, std::move(reopen));
++    AddSubMenuWithStringId(IDC_REOPEN_IN_CONTAINER, IDS_CONTAINER_REOPEN,
++                           reopen_container_menu_.get());
++  }
+ 
+   auto* controller = tabs::VerticalTabStripStateController::From(
+       tab_strip_->delegate()->GetBrowserWindowInterface());
+@@ -479,9 +496,9 @@ void TabMenuModel::Build(int index) {
+   }
+ 
+   AddSeparator(ui::NORMAL_SEPARATOR);
+-  AddItemWithStringId(TabStripModel::CommandCopyURL,
+-                      num_tabs == 1 ? IDS_TAB_CXMENU_COPY_URL
+-                                    : IDS_TAB_CXMENU_COPY_URLS);
++  AddItemWithStringId(
++      TabStripModel::CommandCopyURL,
++      num_tabs == 1 ? IDS_TAB_CXMENU_COPY_URL : IDS_TAB_CXMENU_COPY_URLS);
+ 
+   AddSeparator(ui::NORMAL_SEPARATOR);
+   AddItemWithStringId(TabStripModel::CommandReload, IDS_TAB_CXMENU_RELOAD);
+@@ -631,8 +648,7 @@ void TabMenuModel::Build(int index) {
+   }
+   SetEnabledAt(GetItemCount() - 1,
+                tab_strip_->IsContextMenuCommandEnabled(
+-                   index,
+-                   TabStripModel::CommandCloseTabsToRight));
++                   index, TabStripModel::CommandCloseTabsToRight));
+ }
+ 
+ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TabMenuModel,
+@@ -664,6 +680,10 @@ bool TabMenuModel::IsItemCheckedAt(size_
+ // Overridden to check if the enabled status of the item
+ // should be evaluated by the extension matcher instead of the simple model.
+ bool TabMenuModel::IsEnabledAt(size_t index) const {
++  if (GetCommandIdAt(index) == IDC_NEW_CONTAINER_TAB ||
++      GetCommandIdAt(index) == IDC_REOPEN_IN_CONTAINER) {
++    return true;
++  }
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   if (auto* matcher = GetMatcherIfExtension(index)) {
+     return matcher->IsCommandIdEnabled(GetCommandIdAt(index));
+--- a/chrome/browser/ui/tabs/tab_menu_model.h
++++ b/chrome/browser/ui/tabs/tab_menu_model.h
+@@ -80,6 +80,8 @@ class TabMenuModel : public ui::SimpleMe
+ 
+  private:
+   void Build(int index);
++  std::unique_ptr<ui::SimpleMenuModel> container_menu_;
++  std::unique_ptr<ui::SimpleMenuModel> reopen_container_menu_;
+   void BuildForWebApp(int index);
+   void BuildSendTabToSelfSubmenu(int index, const std::vector<int>& indices);
+   void BuildLegacySendTabToSelfItem();
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -25,6 +25,7 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/defaults.h"
+ #include "chrome/browser/enterprise/isolated_mode/isolated_mode_settings_service_factory.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+@@ -59,6 +60,7 @@
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/global_error/global_error.h"
+ #include "chrome/browser/ui/global_error/global_error_service.h"
+ #include "chrome/browser/ui/global_error/global_error_service_factory.h"
+@@ -686,7 +688,7 @@ int ProfileSubMenuModel::GetAndIncrement
+ }
+ 
+ bool ProfileSubMenuModel::BuildSyncSection() {
+-    return false;
++  return false;
+ }
+ 
+ void ProfileSubMenuModel::BuildGuestProfileRow(Profile* profile) {
+@@ -825,7 +827,6 @@ class SaveAndShareSubMenuModel : public
+   SaveAndShareSubMenuModel(const SaveAndShareSubMenuModel&) = delete;
+   SaveAndShareSubMenuModel& operator=(const SaveAndShareSubMenuModel&) = delete;
+   ~SaveAndShareSubMenuModel() override = default;
+-
+ };
+ 
+ SaveAndShareSubMenuModel::SaveAndShareSubMenuModel(
+@@ -1966,6 +1967,11 @@ void AppMenuModel::Build() {
+           ? IDS_NEW_INCOGNITO_TAB
+           : IDS_NEW_TAB,
+       features::IsRoundedIconsEnabled() ? kTabIcon : kNewTabRefreshOldIcon);
++  if (!browser_->GetProfile()->IsOffTheRecord()) {
++    sub_menus_.push_back(helium::containers::CreateContainerMenu(browser_));
++    AddSubMenuWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB,
++                           sub_menus_.back().get());
++  }
+ 
+   AddItemWithStringIdAndVectorIcon(
+       this, IDC_NEW_WINDOW, IDS_NEW_WINDOW,
+@@ -2301,8 +2307,9 @@ bool AppMenuModel::AddHeliumSchemaItem()
+     return false;
+   }
+ 
+-  const auto update_icon = ui::ImageModel::FromVectorIcon(
+-      omnibox::kProductChromeRefreshOldIcon, ui::kColorMenuIcon, kDefaultIconSize);
++  const auto update_icon =
++      ui::ImageModel::FromVectorIcon(omnibox::kProductChromeRefreshOldIcon,
++                                     ui::kColorMenuIcon, kDefaultIconSize);
+   AddItemWithIcon(
+       IDC_HELIUM_SERVICES_OPEN,
+       l10n_util::GetStringUTF16(IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM),
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -755,13 +755,14 @@ void TabView::OnGestureEvent(ui::Gesture
+ void TabView::OnPaint(gfx::Canvas* canvas) {
+   // Split pinned tabs have a merged background that is rendered in
+   // `SplitTabView`.
+-  if (pinned_ && split_) {
+-    return;
++  if (!(pinned_ && split_)) {
++    tab_styling()->PaintTab(canvas);
++    views::View::OnPaint(canvas);
++  }
++  if (tab_data_.container_color) {
++    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
++                     *tab_data_.container_color);
+   }
+-
+-  tab_styling()->PaintTab(canvas);
+-
+-  views::View::OnPaint(canvas);
+ }
+ 
+ void TabView::AddedToWidget() {
+@@ -1260,9 +1261,8 @@ SkColor TabView::GetNativeFrameMaterialT
+     TabStyle::TabSelectionState selection_state) const {
+   const SkColor color = tab_styling()->tab_style()->GetTabBackgroundColor(
+       selection_state, true, IsFrameActive(), GetColorProvider());
+-  return color_utils::AlphaBlend(
+-      color, SK_ColorTRANSPARENT,
+-      static_cast<float>(GetHoverAnimationValue()));
++  return color_utils::AlphaBlend(color, SK_ColorTRANSPARENT,
++                                 static_cast<float>(GetHoverAnimationValue()));
+ }
+ 
+ bool TabView::ShouldUseNativeFrameMaterials() const {
+--- a/chrome/browser/ui/views/tabs/new_tab_button.cc
++++ b/chrome/browser/ui/views/tabs/new_tab_button.cc
+@@ -7,12 +7,18 @@
+ #include <memory>
+ 
+ #include "base/feature_list.h"
++#include "base/functional/bind.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/tabs/new_tab_button_menu_model.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
+ #include "ui/views/background.h"
+ #include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/view_class_properties.h"
+@@ -34,11 +40,57 @@ NewTabButton::NewTabButton(PressedCallba
+ 
+ NewTabButton::~NewTabButton() = default;
+ 
++bool NewTabButton::OnMousePressed(const ui::MouseEvent& event) {
++  container_hold_opened_ = false;
++  const bool handled = TabStripControlButton::OnMousePressed(event);
++  if (handled && event.IsOnlyLeftMouseButton() && browser_ &&
++      helium::containers::IsEnabled(browser_->GetProfile())) {
++    container_hold_timer_.Start(
++        FROM_HERE, base::Milliseconds(500),
++        base::BindOnce(
++            [](NewTabButton* button) {
++              button->container_hold_opened_ = true;
++              button->ShowContextMenuForViewImpl(
++                  button, button->GetBoundsInScreen().CenterPoint(),
++                  ui::mojom::MenuSourceType::kMouse);
++            },
++            base::Unretained(this)));
++  }
++  return handled;
++}
++
++void NewTabButton::OnMouseReleased(const ui::MouseEvent& event) {
++  container_hold_timer_.Stop();
++  TabStripControlButton::OnMouseReleased(event);
++}
++
++void NewTabButton::OnMouseCaptureLost() {
++  container_hold_timer_.Stop();
++  TabStripControlButton::OnMouseCaptureLost();
++}
++
++void NewTabButton::NotifyClick(const ui::Event& event) {
++  container_hold_timer_.Stop();
++  if (container_hold_opened_ && event.IsMouseEvent()) {
++    return;
++  }
++  container_hold_opened_ = false;
++  if (browser_ && helium::containers::IsEnabled(browser_->GetProfile()) &&
++      browser_->GetProfile()->GetPrefs()->GetBoolean(
++          helium::containers::kAskForNewTabPref)) {
++    helium::containers::ShowContainerPicker(browser_);
++    return;
++  }
++  TabStripControlButton::NotifyClick(event);
++}
++
+ void NewTabButton::ShowContextMenuForViewImpl(
+     View* source,
+     const gfx::Point& point,
+     ui::mojom::MenuSourceType source_type) {
+-  if (base::FeatureList::IsEnabled(features::kNewTabButtonContextMenu)) {
++  if (browser_ &&
++      (helium::containers::IsEnabled(browser_->GetProfile()) ||
++       base::FeatureList::IsEnabled(features::kNewTabButtonContextMenu))) {
+     context_menu_model_ = std::make_unique<NewTabButtonMenuModel>(browser_);
+ 
+     int32_t menu_runner_flags =
+--- a/chrome/browser/ui/views/tabs/new_tab_button.h
++++ b/chrome/browser/ui/views/tabs/new_tab_button.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_VIEWS_TABS_NEW_TAB_BUTTON_H_
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/timer/timer.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/views/tabs/new_tab_button_menu_model.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+@@ -45,7 +46,15 @@ class NewTabButton : public TabStripCont
+   // TabStripControlButton:
+   void UpdateBackground() override;
+ 
++ protected:
++  bool OnMousePressed(const ui::MouseEvent& event) override;
++  void OnMouseReleased(const ui::MouseEvent& event) override;
++  void OnMouseCaptureLost() override;
++  void NotifyClick(const ui::Event& event) override;
++
+  private:
++  base::OneShotTimer container_hold_timer_;
++  bool container_hold_opened_ = false;
+   std::unique_ptr<NewTabButtonMenuModel> context_menu_model_;
+   std::unique_ptr<views::MenuRunner> context_menu_runner_;
+   raw_ptr<BrowserWindowInterface> browser_;
+--- a/chrome/browser/ui/views/tabs/shared/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/shared/BUILD.gn
+@@ -37,8 +37,11 @@ source_set("impl") {
+     "//chrome/app:generated_resources_grit",
+     "//chrome/app/vector_icons",
+     "//chrome/browser:primitives",
++    "//chrome/browser/containers",
+     "//chrome/browser/feature_engagement",
++    "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui:browser_actions",
++    "//chrome/browser/ui:container_ui",
+     "//chrome/browser/ui:layout_constants",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:color_headers",
+--- a/chrome/browser/ui/views/tabs/shared/new_tab_button.cc
++++ b/chrome/browser/ui/views/tabs/shared/new_tab_button.cc
+@@ -5,16 +5,22 @@
+ #include "chrome/browser/ui/views/tabs/shared/new_tab_button.h"
+ 
+ #include "base/feature_list.h"
++#include "base/functional/bind.h"
+ #include "build/build_config.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/tabs/new_tab_button_menu_model.h"
++#include "components/prefs/pref_service.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/events/event.h"
+ #include "ui/views/actions/action_view_controller.h"
+@@ -67,6 +73,35 @@ NewTabButton::NewTabButton(BrowserWindow
+ 
+ NewTabButton::~NewTabButton() = default;
+ 
++bool NewTabButton::OnMousePressed(const ui::MouseEvent& event) {
++  container_hold_opened_ = false;
++  const bool handled = TabStripFlatEdgeButton::OnMousePressed(event);
++  if (handled && event.IsOnlyLeftMouseButton() && browser_ &&
++      helium::containers::IsEnabled(browser_->GetProfile())) {
++    container_hold_timer_.Start(
++        FROM_HERE, base::Milliseconds(500),
++        base::BindOnce(
++            [](NewTabButton* button) {
++              button->container_hold_opened_ = true;
++              button->ShowContextMenuForViewImpl(
++                  button, button->GetBoundsInScreen().CenterPoint(),
++                  ui::mojom::MenuSourceType::kMouse);
++            },
++            base::Unretained(this)));
++  }
++  return handled;
++}
++
++void NewTabButton::OnMouseReleased(const ui::MouseEvent& event) {
++  container_hold_timer_.Stop();
++  TabStripFlatEdgeButton::OnMouseReleased(event);
++}
++
++void NewTabButton::OnMouseCaptureLost() {
++  container_hold_timer_.Stop();
++  TabStripFlatEdgeButton::OnMouseCaptureLost();
++}
++
+ void NewTabButton::SetOnContextMenuWillShowCallback(
+     base::RepeatingClosure callback) {
+   on_context_menu_will_show_callback_ = std::move(callback);
+@@ -81,7 +116,8 @@ void NewTabButton::ShowContextMenuForVie
+     views::View* source,
+     const gfx::Point& point,
+     ui::mojom::MenuSourceType source_type) {
+-  if (base::FeatureList::IsEnabled(features::kNewTabButtonContextMenu)) {
++  if (helium::containers::IsEnabled(browser_->GetProfile()) ||
++      base::FeatureList::IsEnabled(features::kNewTabButtonContextMenu)) {
+     if (on_context_menu_will_show_callback_) {
+       on_context_menu_will_show_callback_.Run();
+     }
+@@ -116,6 +152,11 @@ void NewTabButton::SetMiddleClickCallbac
+ }
+ 
+ void NewTabButton::NotifyClick(const ui::Event& event) {
++  container_hold_timer_.Stop();
++  if (container_hold_opened_ && event.IsMouseEvent()) {
++    return;
++  }
++  container_hold_opened_ = false;
+ #if BUILDFLAG(IS_LINUX)
+   if (event.IsMouseEvent()) {
+     const ui::MouseEvent& mouse = static_cast<const ui::MouseEvent&>(event);
+@@ -132,6 +173,12 @@ void NewTabButton::NotifyClick(const ui:
+     }
+   }
+ #endif
++  if (browser_ && helium::containers::IsEnabled(browser_->GetProfile()) &&
++      browser_->GetProfile()->GetPrefs()->GetBoolean(
++          helium::containers::kAskForNewTabPref)) {
++    helium::containers::ShowContainerPicker(browser_);
++    return;
++  }
+   TabStripFlatEdgeButton::NotifyClick(event);
+ }
+ 
+--- a/chrome/browser/ui/views/tabs/shared/new_tab_button.h
++++ b/chrome/browser/ui/views/tabs/shared/new_tab_button.h
+@@ -10,6 +10,7 @@
+ 
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/timer/timer.h"
+ #include "chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/events/event.h"
+@@ -46,10 +47,16 @@ class NewTabButton : public TabStripFlat
+       ui::mojom::MenuSourceType source_type) override;
+ 
+  protected:
++  bool OnMousePressed(const ui::MouseEvent& event) override;
++  void OnMouseReleased(const ui::MouseEvent& event) override;
++  void OnMouseCaptureLost() override;
++
+   // views::Button:
+   void NotifyClick(const ui::Event& event) override;
+ 
+  private:
++  base::OneShotTimer container_hold_timer_;
++  bool container_hold_opened_ = false;
+   void OnContextMenuClosed();
+ 
+   std::unique_ptr<views::ActionViewController> action_view_controller_;
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -504,8 +504,8 @@ void Tab::Layout(PassKey) {
+   // indicator, but visually it will be smaller at kFaviconSize wide.
+   gfx::Rect favicon_bounds(
+       start,
+-      contents_rect.y() + Center(contents_rect.height(), gfx::kFaviconSize),
+-      0, 0);
++      contents_rect.y() + Center(contents_rect.height(), gfx::kFaviconSize), 0,
++      0);
+   if (showing_icon_) {
+     if (center_icon_) {
+       // When centering the favicon, the favicon is allowed to escape the normal
+@@ -896,6 +896,10 @@ void Tab::PaintChildren(const views::Pai
+ 
+ void Tab::OnPaint(gfx::Canvas* canvas) {
+   tab_style_views()->PaintTab(canvas);
++  if (data_.container_color) {
++    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
++                     *data_.container_color);
++  }
+ }
+ 
+ void Tab::AddedToWidget() {
+@@ -975,8 +979,12 @@ void Tab::SetSplit(std::optional<split_t
+ }
+ 
+ std::u16string Tab::GetRenderedTooltipText(const gfx::Point& p) const {
+-  if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII("tab-hover-cards") == "tooltip")
+-    return GetTooltipText(data_.title, data_.alert_state.has_value() ? data_.alert_state.value() : std::optional<tabs::TabAlert>());
++  if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++          "tab-hover-cards") == "tooltip") {
++    return GetTooltipText(data_.title, data_.alert_state.has_value()
++                                           ? data_.alert_state.value()
++                                           : std::optional<tabs::TabAlert>());
++  }
+   // Tab hover cards replace tooltips for tabs.
+   return std::u16string();
+ }
+@@ -1334,7 +1342,8 @@ void Tab::UpdateIconVisibility() {
+   const int close_button_width =
+       GetLayoutConstant(LayoutConstant::kTabCloseButtonSize) +
+       GetLayoutConstant(LayoutConstant::kTabAfterTitlePadding);
+-  const bool large_enough_for_close_button = mouse_hovered_ &&
++  const bool large_enough_for_close_button =
++      mouse_hovered_ &&
+       available_width >= (touch_ui ? kTouchMinimumContentsWidthForCloseButtons
+                                    : kMinimumContentsWidthForCloseButtons);
+ 
+@@ -1349,7 +1358,9 @@ void Tab::UpdateIconVisibility() {
+   const bool should_show_close_button =
+       !IsLockedForOnTask(controller_->GetBrowserWindowInterface());
+ #else
+-  const bool should_show_close_button = !base::CommandLine::ForCurrentProcess()->HasSwitch("hide-tab-close-buttons");
++  const bool should_show_close_button =
++      !base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "hide-tab-close-buttons");
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+   if (IsActive()) {
+@@ -1393,7 +1404,8 @@ void Tab::UpdateIconVisibility() {
+     }
+ 
+     showing_close_button_ =
+-        !closing_ && should_show_close_button && large_enough_for_close_button &&
++        !closing_ && should_show_close_button &&
++        large_enough_for_close_button &&
+         !(declutter_eligible &&
+           available_width <=
+               TabStyle::kTabStripDeclutterMaxTabWidthForCloseHide);
+--- a/chrome/browser/ui/webui/bookmarks/bookmarks_ui.cc
++++ b/chrome/browser/ui/webui/bookmarks/bookmarks_ui.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/bookmarks/bookmarks_service_feature.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/webui/bookmarks/bookmarks_message_handler.h"
+ #include "chrome/browser/ui/webui/favicon_source.h"
+@@ -212,6 +213,7 @@ BookmarksUI::BookmarksUI(content::WebUI*
+   web_ui->AddMessageHandler(std::move(plural_string_handler));
+ 
+   web_ui->AddMessageHandler(std::make_unique<BookmarksMessageHandler>());
++  helium::containers::RegisterContainerWebUI(web_ui, source);
+   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
+ }
+ 
+--- a/chrome/browser/ui/webui/history/history_ui.cc
++++ b/chrome/browser/ui/webui/history/history_ui.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/signin/signin_ui_util.h"
+ #include "chrome/browser/sync/sync_service_factory.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/webui/cr_components/history/history_util.h"
+ #include "chrome/browser/ui/webui/cr_components/history_clusters/history_clusters_util.h"
+@@ -281,6 +282,7 @@ HistoryUI::HistoryUI(content::WebUI* web
+                                                  base::Unretained(this)));
+ 
+   web_ui->AddMessageHandler(std::make_unique<webui::NavigationHandler>());
++  helium::containers::RegisterContainerWebUI(web_ui, data_source);
+   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
+ 
+   web_ui->AddMessageHandler(
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -49,6 +49,7 @@
+ #include "chrome/browser/sync/sync_service_factory.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service_factory.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/hats/hats_service.h"
+ #include "chrome/browser/ui/hats/hats_service_factory.h"
+ #include "chrome/browser/ui/managed_ui.h"
+@@ -482,6 +483,7 @@ SettingsUI::SettingsUI(content::WebUI* w
+ 
+   // Add the metrics handler to write uma stats.
+   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
++  helium::containers::RegisterContainerWebUI(web_ui, html_source);
+ 
+   webui::SetupWebUIDataSource(html_source, kSettingsResources,
+                               IDR_SETTINGS_SETTINGS_HTML);
+@@ -651,8 +653,7 @@ SettingsUI::SettingsUI(content::WebUI* w
+   // features, the visibility of these are separately controlled but we want to
+   // show the subpage if any of the AI features or Glic are enabled.
+   html_source->AddBoolean("showAiPage", false);
+-  html_source->AddBoolean("showAiPageAiFeatureSection",
+-                          false);
++  html_source->AddBoolean("showAiPageAiFeatureSection", false);
+ 
+   html_source->AddBoolean("replaceSyncPromosWithSignInPromos",
+                           syncer::IsReplaceSyncPromosWithSignInPromosEnabled());
+--- a/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_side_panel_ui.cc
++++ b/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_side_panel_ui.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profiles_state.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/webui/bookmarks/bookmark_prefs.h"
+ #include "chrome/browser/ui/webui/commerce/price_tracking_handler.h"
+@@ -248,6 +249,7 @@ BookmarksSidePanelUI::BookmarksSidePanel
+   plural_string_handler->AddLocalizedString("bookmarkDeletionCount",
+                                             IDS_BOOKMARK_DELETION_COUNT);
+   web_ui->AddMessageHandler(std::move(plural_string_handler));
++  helium::containers::RegisterContainerWebUI(web_ui, source);
+ 
+   content::URLDataSource::Add(profile,
+                               std::make_unique<SanitizedImageSource>(profile));
+--- a/chrome/browser/ui/webui/side_panel/reading_list/reading_list_page_handler.cc
++++ b/chrome/browser/ui/webui/side_panel/reading_list/reading_list_page_handler.cc
+@@ -19,6 +19,7 @@
+ #include "base/time/default_clock.h"
+ #include "base/time/time.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+ #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
+@@ -28,6 +29,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/profiles/profile_view_utils.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -75,6 +77,12 @@ class ReadLaterItemContextMenu : public
+     // in the side panel.
+     AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
+                         IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB);
++    if (helium::containers::IsEnabled(browser_->GetProfile())) {
++      container_menu_ =
++          helium::containers::CreateContainerMenu(browser_, {url_});
++      AddSubMenuWithStringId(IDC_OPEN_LINK_IN_CONTAINER,
++                             IDS_CONTAINER_OPEN_LINK, container_menu_.get());
++    }
+     AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
+                         IDS_BOOKMARK_BAR_OPEN_IN_NEW_WINDOW);
+     AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+@@ -145,6 +153,7 @@ class ReadLaterItemContextMenu : public
+     kMarkAsUnread,
+     kDelete,
+   };
++  std::unique_ptr<ui::SimpleMenuModel> container_menu_;
+   const raw_ptr<BrowserWindowInterface> browser_;
+   raw_ptr<ReadingListModel> reading_list_model_;
+   GURL url_;
+--- a/chrome/browser/web_applications/BUILD.gn
++++ b/chrome/browser/web_applications/BUILD.gn
+@@ -538,6 +538,7 @@ source_set("web_applications") {
+     # TODO: Exclude "//extensions" as well.
+     "//chrome/browser/apps/app_service",
+     "//chrome/browser/ash/system_web_apps",
++    "//chrome/browser/containers",
+     "//chrome/browser/extensions",
+   ]
+ 
+--- a/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
++++ b/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
+@@ -14,6 +14,7 @@
+ #include "base/functional/concurrent_closures.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/values.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/web_applications/extensions_manager.h"
+ #include "chrome/browser/web_applications/locks/all_apps_lock.h"
+@@ -21,6 +22,7 @@
+ #include "chrome/browser/web_applications/web_app_registrar.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/prefs/pref_service.h"
++#include "content/public/browser/storage_partition.h"
+ 
+ namespace web_app {
+ 
+@@ -63,6 +65,13 @@ void GarbageCollectStoragePartitionsComm
+ 
+ void GarbageCollectStoragePartitionsCommand::DoGarbageCollection() {
+   std::unordered_set<base::FilePath> allowlist;
++  for (const auto& container : helium::containers::GetContainers(profile_)) {
++    allowlist.insert(
++        profile_
++            ->GetStoragePartition(
++                helium::containers::GetPartitionConfig(profile_, container.id))
++            ->GetPath());
++  }
+ 
+   // InstallGate delays extension installations.
+   install_gate_ =
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1968,6 +1968,7 @@ if (!is_android) {
+       "//chrome/browser/collaboration",
+       "//chrome/browser/component_updater",
+       "//chrome/browser/component_updater:browser_tests",
++      "//chrome/browser/containers:browser_tests",
+       "//chrome/browser/content_extraction",
+       "//chrome/browser/content_extraction:browser_tests",
+       "//chrome/browser/content_index:browser_tests",
+--- a/components/sessions/content/content_platform_specific_tab_data.cc
++++ b/components/sessions/content/content_platform_specific_tab_data.cc
+@@ -5,16 +5,20 @@
+ #include "components/sessions/content/content_platform_specific_tab_data.h"
+ 
+ #include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
+ 
+ namespace sessions {
+ 
+ ContentPlatformSpecificTabData::ContentPlatformSpecificTabData(
+-    content::WebContents* web_contents)
+-    :  // TODO(ajwong): This does not correctly handle storage for isolated
+-       // apps.
+-      session_storage_namespace_(web_contents->GetController()
+-                                     .GetDefaultSessionStorageNamespace()) {}
++    content::WebContents* web_contents) {
++  session_storage_namespace_ =
++      web_contents->GetController().GetSessionStorageNamespace(
++          web_contents->GetPrimaryMainFrame()
++              ->GetStoragePartition()
++              ->GetConfig());
++}
+ 
+ ContentPlatformSpecificTabData::ContentPlatformSpecificTabData() = default;
+ ContentPlatformSpecificTabData::~ContentPlatformSpecificTabData() = default;
+--- a/content/browser/renderer_host/navigation_controller_impl.h
++++ b/content/browser/renderer_host/navigation_controller_impl.h
+@@ -284,7 +284,7 @@ class CONTENT_EXPORT NavigationControlle
+   // The session storage namespace that all child `blink::WebView`s associated
+   // with `partition_config` should use.
+   SessionStorageNamespace* GetSessionStorageNamespace(
+-      const StoragePartitionConfig& partition_config);
++      const StoragePartitionConfig& partition_config) override;
+ 
+   // Returns the index of the specified entry, or -1 if entry is not contained
+   // in this NavigationController.
+@@ -1213,7 +1213,6 @@ class CONTENT_EXPORT NavigationControlle
+   // the wrong order in the history view.
+   TimeSmoother time_smoother_;
+ 
+-
+ #if BUILDFLAG(IS_ANDROID)
+   // Stores captured screenshots for this `NavigationController`. The
+   // screenshots are used to present the user with the previews of the
+--- a/content/public/browser/navigation_controller.h
++++ b/content/public/browser/navigation_controller.h
+@@ -49,6 +49,7 @@ class BrowserContext;
+ class NavigationEntry;
+ class RenderFrameHost;
+ class NavigationHandle;
++class StoragePartitionConfig;
+ struct OpenURLParams;
+ 
+ // A NavigationController manages session history, i.e., a back-forward list
+@@ -629,6 +630,11 @@ class NavigationController {
+   // are migrated.
+   virtual SessionStorageNamespace* GetDefaultSessionStorageNamespace() = 0;
+ 
++  // Returns (or creates) the namespace for a specific storage partition.
++  // Session restore must preserve the partition of isolated tabs.
++  virtual SessionStorageNamespace* GetSessionStorageNamespace(
++      const StoragePartitionConfig& partition_config) = 0;
++
+   // Returns true if a reload happens when activated (SetActive(true) is
+   // invoked). This is true for session/tab restore, cloned tabs and tabs that
+   // requested a reload (using SetNeedsReload()) after their renderer was
+--- a/tools/metrics/histograms/metadata/bookmarks/enums.xml
++++ b/tools/metrics/histograms/metadata/bookmarks/enums.xml
+@@ -215,6 +215,7 @@ chromium-metrics-reviews@google.com.
+   <int value="23" label="Open in split view"/>
+   <int value="24" label="Open in new tab group"/>
+   <int value="25" label="Open in isolated window"/>
++  <int value="26" label="Open in container"/>
+ </enum>
+ 
+ <!-- LINT.ThenChange(//chrome/browser/resources/bookmarks/constants.ts:Command) -->
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -41,6 +41,7 @@
+ #include "base/types/pass_key.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/tab_helper.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
+@@ -59,6 +60,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/features.h"
+@@ -203,16 +205,16 @@ base::WeakPtr<performance_manager::PageN
+   }
+ 
+   base::WeakPtr<performance_manager::PageNode> page_node =
+-      performance_manager::PerformanceManager::
+-        GetPrimaryPageNodeForWebContents(contents);
++      performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
++          contents);
+ 
+   if (!page_node) {
+     return nullptr;
+   }
+ 
+-  CanDiscardResult can_discard_result = eligibility_policy->CanDiscard(
+-      page_node.get(), kHibernateDiscardReason,
+-      /*ignore_recent_visibility=*/true);
++  CanDiscardResult can_discard_result =
++      eligibility_policy->CanDiscard(page_node.get(), kHibernateDiscardReason,
++                                     /*ignore_recent_visibility=*/true);
+ 
+   if (can_discard_result != CanDiscardResult::kEligible) {
+     return nullptr;
+@@ -2792,6 +2794,13 @@ void TabStripModel::ExecuteContextMenuCo
+       base::RecordAction(UserMetricsAction("TabContextMenu_NewTab"));
+       UMA_HISTOGRAM_ENUMERATION("Tab.NewTab", NewTabTypes::kNewTabContextMenu,
+                                 NewTabTypes::kNewTabEnumCount);
++      auto* browser = delegate()->GetBrowserWindowInterface();
++      if (browser && helium::containers::IsEnabled(browser->GetProfile()) &&
++          browser->GetProfile()->GetPrefs()->GetBoolean(
++              helium::containers::kAskForNewTabPref)) {
++        helium::containers::ShowContainerPicker(browser);
++        break;
++      }
+       delegate()->AddTabAt(GURL(), context_index + 1, true,
+                            GetTabGroupForTab(context_index));
+       break;
+@@ -3773,10 +3782,10 @@ std::vector<int> TabStripModel::GetIndic
+                                            .rbegin()
+                                     : index;
+   } else if (id == CommandCloseTabsToLeft) {
+-    first_unclosed_tab =
+-        is_selected
+-            ? *selection_model_.GetListSelectionModel().selected_indices().begin()
+-            : index;
++    first_unclosed_tab = is_selected ? *selection_model_.GetListSelectionModel()
++                                            .selected_indices()
++                                            .begin()
++                                     : index;
+   }
+ 
+   // If the tab that the context menu command is invoked on is not selected and
+@@ -4339,7 +4348,7 @@ void TabStripModel::SelectMRUTab(TabRela
+   if (mru_cycle_list_.empty()) {
+     BrowserWindowInterface* browser =
+         GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+-          GetWebContentsAt(0));
++            GetWebContentsAt(0));
+     if (!browser) {
+       return;
+     }
+--- a/chrome/browser/ui/views/frame/dbus_appmenu.cc
++++ b/chrome/browser/ui/views/frame/dbus_appmenu.cc
+@@ -82,6 +82,8 @@ enum ReservedCommandId {
+ 
+ constexpr auto kFileMenu = std::to_array<DbusAppmenuCommand>(
+     {{IDC_NEW_TAB, IDS_NEW_TAB},
++     {IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB},
++     {IDC_MANAGE_CONTAINERS, IDS_CONTAINER_MANAGE},
+      {IDC_NEW_WINDOW, IDS_NEW_WINDOW},
+      {IDC_NEW_INCOGNITO_WINDOW, IDS_NEW_INCOGNITO_WINDOW},
+      {IDC_RESTORE_TAB, IDS_REOPEN_CLOSED_TABS_LINUX},
+@@ -144,7 +146,6 @@ constexpr auto kProfilesMenu = std::to_a
+      {kTagProfileEdit, IDS_PROFILES_MANAGE_BUTTON_LABEL},
+      {kTagProfileCreate, IDS_PROFILES_ADD_PROFILE_LABEL}});
+ 
+-
+ void FindMenuItemsForCommandAux(
+     ui::MenuModel* menu,
+     int command,
+--- a/chrome/browser/ui/views/frame/system_menu_model_builder.cc
++++ b/chrome/browser/ui/views/frame/system_menu_model_builder.cc
+@@ -151,6 +151,9 @@ void SystemMenuModelBuilder::BuildSystem
+ #if BUILDFLAG(IS_MAC)
+   model->AddItemWithStringId(IDC_RESTORE_TAB, IDS_REOPEN_CLOSED_TABS_MAC);
+ #else
++  if (!browser()->GetProfile()->IsOffTheRecord()) {
++    model->AddItemWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB);
++  }
+   model->AddItemWithStringId(IDC_RESTORE_TAB, IDS_RESTORE_TAB);
+ #endif
+   model->SetElementIdentifierAt(
+@@ -268,6 +271,10 @@ void SystemMenuModelBuilder::BuildSystem
+           browser()->GetType() ==
+               BrowserWindowInterface::Type::TYPE_APP_POPUP) {
+         model->AddItemWithStringId(IDC_NEW_TAB, IDS_APP_MENU_NEW_WEB_PAGE);
++        if (!browser()->GetProfile()->IsOffTheRecord()) {
++          model->AddItemWithStringId(IDC_NEW_CONTAINER_TAB,
++                                     IDS_CONTAINER_NEW_TAB);
++        }
+       } else {
+         model->AddItemWithStringId(IDC_SHOW_AS_TAB, IDS_SHOW_AS_TAB);
+       }
+--- a/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
++++ b/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
+@@ -16,7 +16,9 @@
+ #include "base/metrics/histogram_macros.h"
+ #include "base/metrics/user_metrics.h"
+ #include "build/build_config.h"
++#include "chrome/browser/containers/container_service.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
+ #include "chrome/browser/search/search.h"
+@@ -26,6 +28,7 @@
+ #include "chrome/browser/ui/browser_tabstrip.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/features.h"
+@@ -63,6 +66,7 @@
+ #include "components/contextual_tasks/public/features.h"
+ #include "components/feature_engagement/public/feature_constants.h"
+ #include "components/omnibox/browser/autocomplete_classifier.h"
++#include "components/prefs/pref_service.h"
+ #include "components/saved_tab_groups/public/saved_tab_group.h"
+ #include "components/saved_tab_groups/public/tab_group_sync_service.h"
+ #include "components/split_tabs/split_tab_id.h"
+@@ -467,6 +471,13 @@ void BrowserTabStripController::OnDropIn
+ }
+ 
+ void BrowserTabStripController::CreateNewTab(NewTabTypes context) {
++  auto* browser = browser_view_->browser();
++  if (helium::containers::IsEnabled(browser->GetProfile()) &&
++      browser->GetProfile()->GetPrefs()->GetBoolean(
++          helium::containers::kAskForNewTabPref)) {
++    helium::containers::ShowContainerPicker(browser);
++    return;
++  }
+   chrome::NewTab(browser_view_->browser(), context);
+ }
+ 
+--- a/chrome/browser/ui/web_applications/web_app_menu_model.cc
++++ b/chrome/browser/ui/web_applications/web_app_menu_model.cc
+@@ -202,6 +202,7 @@ void WebAppMenuModel::Build() {
+     AddItemWithStringIdAndVectorIcon(
+         this, IDC_NEW_TAB, IDS_NEW_TAB,
+         features::IsRoundedIconsEnabled() ? kTabIcon : kNewTabRefreshOldIcon);
++    AddItemWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB);
+   }
+   AddItemWithStringIdAndVectorIcon(this, IDC_COPY_URL, IDS_COPY_URL,
+                                    features::IsRoundedIconsEnabled()
+--- a/chrome/browser/resources/side_panel/bookmarks/bookmarks_api_proxy.ts
++++ b/chrome/browser/resources/side_panel/bookmarks/bookmarks_api_proxy.ts
+@@ -40,6 +40,8 @@ export interface BookmarksApiProxy {
+       id: string, depth: number, clickModifiers: ClickModifiers,
+       source: ActionSource): void;
+ 
++  openInContainer(ids: string[]): void;
++
+   // Context menu.
+   showContextMenu(id: string, x: number, y: number, source: ActionSource): void;
+   contextMenuOpenBookmarkInNewTab(ids: string[], source: ActionSource): void;
+@@ -81,6 +83,10 @@ export class BookmarksApiProxyImpl imple
+     this.handler.bookmarkCurrentTabInFolder(folderId);
+   }
+ 
++  openInContainer(ids: string[]) {
++    this.handler.openInContainer(ids);
++  }
++
+   contextMenuOpenBookmarkInNewTab(ids: string[], source: ActionSource) {
+     this.handler.executeOpenInNewTabCommand(ids, source);
+   }
+--- a/chrome/browser/ui/webui/side_panel/bookmarks/BUILD.gn
++++ b/chrome/browser/ui/webui/side_panel/bookmarks/BUILD.gn
+@@ -54,6 +54,7 @@ source_set("impl") {
+     "//chrome/browser/resources/side_panel/shared:resources_grit",
+     "//chrome/browser/ui:browser_element_identifiers",
+     "//chrome/browser/ui:chrome_pages",
++    "//chrome/browser/ui:container_ui",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui/bookmarks",
+     "//chrome/browser/ui/views/interaction",
+--- a/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks.mojom
++++ b/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks.mojom
+@@ -81,6 +81,9 @@ interface BookmarksPageHandlerFactory {
+ // A merged node is a bookmark node that can contain both local and account
+ // bookmarks at the same time with no differentiation in the Ui.
+ interface BookmarksPageHandler {
++  // Opens selected bookmarks using the native container picker.
++  OpenInContainer(array<string> side_panel_ids);
++
+   // Bookmarks the current active tab in the given folder.
+   BookmarkCurrentTabInFolder(string folder_id);
+ 
+--- a/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_page_handler.cc
++++ b/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_page_handler.cc
+@@ -39,6 +39,7 @@
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
+@@ -509,6 +510,37 @@ void BookmarksPageHandler::DropBookmarks
+                      browser_window_interface_);
+ }
+ 
++void BookmarksPageHandler::OpenInContainer(
++    const std::vector<std::string>& side_panel_ids) {
++  if (!browser_window_interface_ || side_panel_ids.empty()) {
++    return;
++  }
++  const auto node_ids =
++      GetBookmarkIDsFromSidePanelIDs(*bookmark_merged_surface_, side_panel_ids);
++  std::vector<GURL> urls;
++  auto collect = [&urls](auto&& self,
++                         const bookmarks::BookmarkNode* node) -> void {
++    if (!node) {
++      return;
++    }
++    if (node->is_url()) {
++      urls.push_back(node->url());
++    } else {
++      for (const auto& child : node->children()) {
++        self(self, child.get());
++      }
++    }
++  };
++  for (int64_t id : node_ids) {
++    collect(collect, bookmarks::GetBookmarkNodeByID(
++                         bookmark_merged_surface_->bookmark_model(), id));
++  }
++  if (!urls.empty()) {
++    helium::containers::ShowContainerPicker(browser_window_interface_,
++                                            std::move(urls));
++  }
++}
++
+ void BookmarksPageHandler::ExecuteOpenInNewTabCommand(
+     const std::vector<std::string>& side_panel_ids,
+     side_panel::mojom::ActionSource source) {
+@@ -958,7 +990,6 @@ void BookmarksPageHandler::BookmarkNodeC
+                                node->is_url() ? node->url().spec() : "");
+ }
+ 
+-std::string GetFolderSidePanelIDForTesting(
+-    const BookmarkParentFolder& folder) {
++std::string GetFolderSidePanelIDForTesting(const BookmarkParentFolder& folder) {
+   return GetFolderSidePanelID(folder);
+ }
+--- a/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_page_handler.h
++++ b/chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_page_handler.h
+@@ -37,6 +37,7 @@ class BookmarksPageHandler : public side
+   ~BookmarksPageHandler() override;
+ 
+   // side_panel::mojom::BookmarksPageHandler:
++  void OpenInContainer(const std::vector<std::string>& side_panel_ids) override;
+   void BookmarkCurrentTabInFolder(const std::string& folder_id) override;
+   void CreateFolder(const std::string& folder_id,
+                     const std::string& title,
+--- a/chrome/browser/ui/bookmarks/BUILD.gn
++++ b/chrome/browser/ui/bookmarks/BUILD.gn
+@@ -75,6 +75,7 @@ source_set("impl") {
+     "//chrome/browser:browser_features",
+     "//chrome/browser:defaults",
+     "//chrome/browser/bookmarks",
++    "//chrome/browser/containers",
+     "//chrome/browser/page_load_metrics",
+     "//chrome/browser/prefs",
+     "//chrome/browser/profiles:profile",
+@@ -82,6 +83,7 @@ source_set("impl") {
+     "//chrome/browser/search",
+     "//chrome/browser/tab_group_sync:factories",
+     "//chrome/browser/ui:chrome_pages",
++    "//chrome/browser/ui:container_ui",
+     "//chrome/browser/ui:incognito_allowed_url",
+     "//chrome/browser/ui:sad_tab",
+     "//chrome/browser/ui:simple_message_box_headers",
+--- a/chrome/browser/ui/views/tabs/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/BUILD.gn
+@@ -72,6 +72,8 @@ source_set("new_tab_button_menu_model_im
+     "//base",
+     "//chrome/app:command_ids",
+     "//chrome/app:generated_resources",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui:container_ui",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/tabs",
+     "//chrome/browser/ui/tabs:tab_group",
+--- a/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
++++ b/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
+@@ -9,9 +9,11 @@
+ 
+ #include "base/metrics/user_metrics.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -35,6 +37,11 @@ NewTabButtonMenuModel::NewTabButtonMenuM
+   // Build the menu.
+   AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
+   SetElementIdentifierAt(GetIndexOfCommandId(IDC_NEW_TAB).value(), kNewTab);
++  if (!browser_->GetProfile()->IsOffTheRecord()) {
++    container_menu_ = helium::containers::CreateContainerMenu(browser_);
++    AddSubMenuWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB,
++                           container_menu_.get());
++  }
+   AddNewTabInGroupItem();
+ 
+   AddSeparator(ui::NORMAL_SEPARATOR);
+--- a/chrome/browser/ui/views/tabs/new_tab_button_menu_model.h
++++ b/chrome/browser/ui/views/tabs/new_tab_button_menu_model.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_NEW_TAB_BUTTON_MENU_MODEL_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_NEW_TAB_BUTTON_MENU_MODEL_H_
+ 
++#include <memory>
++
+ #include "base/memory/raw_ptr.h"
+ #include "ui/base/interaction/element_identifier.h"
+ #include "ui/menus/simple_menu_model.h"
+@@ -29,6 +31,7 @@ class NewTabButtonMenuModel : public ui:
+                                   ui::Accelerator* accelerator) const override;
+ 
+  private:
++  std::unique_ptr<ui::SimpleMenuModel> container_menu_;
+   void AddNewTabInGroupItem();
+   void AddNewSplitTabItem();
+ 

@@ -1,0 +1,21 @@
+--- a/chrome/test/data/webui/side_panel/bookmarks/test_bookmarks_api_proxy.ts
++++ b/chrome/test/data/webui/side_panel/bookmarks/test_bookmarks_api_proxy.ts
+@@ -27,6 +27,7 @@
+       'isActiveTabInSplit',
+       'bookmarkCurrentTabInFolder',
+       'openBookmark',
++      'openInContainer',
+       'contextMenuOpenBookmarkInNewTab',
+       'contextMenuOpenBookmarkInNewWindow',
+       'contextMenuOpenBookmarkInIncognitoWindow',
+@@ -85,6 +86,10 @@
+     this.methodCalled('openBookmark', id, depth, clickModifiers, source);
+   }
+ 
++  openInContainer(ids: string[]) {
++    this.methodCalled('openInContainer', ids);
++  }
++
+   contextMenuOpenBookmarkInNewTab(ids: string[], source: ActionSource) {
+     this.methodCalled('contextMenuOpenBookmarkInNewTab', ids, source);
+   }
