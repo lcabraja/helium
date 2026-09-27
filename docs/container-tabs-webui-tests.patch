@@ -7,7 +7,7 @@
 +      'openInContainer',
        'contextMenuOpenBookmarkInNewTab',
        'contextMenuOpenBookmarkInNewWindow',
-       'contextMenuOpenBookmarkInIncognitoWindow',
+       'contextMenuOpenBookmarkInOffTheRecordWindow',
 @@ -85,6 +86,10 @@
      this.methodCalled('openBookmark', id, depth, clickModifiers, source);
    }

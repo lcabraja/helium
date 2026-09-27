@@ -65,3 +65,26 @@ pushover-cli send --title Codex 'Helium development build sent to Mitsuha'
 ```
 
 Only send that completion message after the build and transfer succeed.
+
+## Katal preparation on 27 September 2026
+
+The complete Chromium 154.0.8037.57 checkout and pinned DEPS were fetched on
+Katal, using Chromium's GitHub mirror for the root repository. Both Google and
+GitHub resolve that tag to `73c14f6228d7cd537c855007e8f88678969cc0eb`.
+The common and macOS c464a10 patch series applied without fuzz, 365 patches
+in total. The additional WebUI test patch required its context to use Chromium
+154's `contextMenuOpenBookmarkInOffTheRecordWindow` name. After correction,
+it applied without fuzz and its reverse round trip restored the original file.
+
+Retain the full checkout for browser tests. The platform's normal
+`prune_binaries.py` step removes `chrome/test/data` and other test fixtures;
+it was intentionally skipped for this development checkout.
+
+The pinned Clang, Rust, GN, Siso, TypeScript, Go and Node tools were downloaded,
+along with Helium's verified platform resources. GN configuration stopped in
+`build/config/apple/sdk_info.py` because only Command Line Tools were installed:
+`xcodebuild -version` requires full Xcode. Xcode and its Metal component remain
+required. No app compilation, browser tests, UI checks, signing or app delivery
+has completed. The proposed non-component arm64 build targets macOS 15.0 so
+that it can run on Mitsuha's macOS 15.5; that target still needs validation in
+the built binaries.
