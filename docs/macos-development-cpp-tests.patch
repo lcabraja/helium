@@ -1,3 +1,29 @@
+--- a/chrome/browser/accessibility/ax_main_node_annotator_controller_browsertest.cc
++++ b/chrome/browser/accessibility/ax_main_node_annotator_controller_browsertest.cc
+@@ -2,6 +2,9 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+
++#include "services/screen_ai/buildflags/buildflags.h"
++
++#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ #include "chrome/browser/accessibility/ax_main_node_annotator_controller.h"
+
+ #include "base/test/scoped_feature_list.h"
+@@ -22,7 +25,6 @@
+ #include "content/public/test/accessibility_notification_waiter.h"
+ #include "content/public/test/browser_test.h"
+ #include "net/dns/mock_host_resolver.h"
+-#include "services/screen_ai/buildflags/buildflags.h"
+ #include "services/screen_ai/public/cpp/utilities.h"
+ #include "ui/accessibility/accessibility_features.h"
+ #include "ui/accessibility/ax_features.mojom-features.h"
+@@ -265,3 +267,5 @@
+   EXPECT_TRUE(web_contents->GetAccessibilityMode().has_mode(
+       ui::AXMode::kAnnotateMainNode));
+ }
++
++#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 --- a/chrome/browser/download/download_browsertest.cc
 +++ b/chrome/browser/download/download_browsertest.cc
 @@ -86,6 +86,7 @@
@@ -69,6 +95,39 @@
    EXPECT_EQ(profile_signals_report.site_isolation_enabled(),
              device_signals::GetSiteIsolationEnabled());
  }
+--- a/chrome/browser/enterprise/signals/profile_signals_collector_browsertest.cc
++++ b/chrome/browser/enterprise/signals/profile_signals_collector_browsertest.cc
+@@ -24,7 +24,10 @@
+ #include "components/policy/core/common/cloud/cloud_policy_util.h"
+ #include "components/policy/proto/device_management_backend.pb.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#endif
+ #include "content/public/test/browser_test.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+
+@@ -68,15 +71,19 @@
+         prefs::kBuiltInDnsClientEnabled, true);
+
+     // Give the testing profile a safe browsing level of "STANDARD_PROTECTION"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
++#endif
+   }
+
+   // Helper function to check the profile level signals are collected correctly.
+   void CheckSignalsCollected(ProfileSignalsResponse& response) {
+     EXPECT_EQ(response.profile_enrollment_domain, kFakeUserEnrollmentDomain);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     EXPECT_EQ(response.safe_browsing_protection_level,
+               safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
++#endif
+     EXPECT_TRUE(response.built_in_dns_client_enabled);
+   }
+
 --- a/chrome/browser/extensions/api/identity/identity_apitest.cc
 +++ b/chrome/browser/extensions/api/identity/identity_apitest.cc
 @@ -61,6 +61,7 @@
@@ -652,6 +711,16 @@
        CHECK_DEREF(
            search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
                profile)),
+--- a/chrome/browser/signin/dice_browsertest.cc
++++ b/chrome/browser/signin/dice_browsertest.cc
+@@ -69,6 +69,7 @@
+ #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "components/signin/public/base/signin_pref_names.h"
+ #include "chrome/common/url_constants.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/test/base/in_process_browser_test.h"
 --- a/chrome/browser/ssl/ssl_browsertest.cc
 +++ b/chrome/browser/ssl/ssl_browsertest.cc
 @@ -7122,6 +7122,7 @@
@@ -1234,7 +1303,43 @@
    ShareServicePrerenderBrowserTest()
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -3062,10 +3062,6 @@
+@@ -1873,6 +1873,35 @@
+
+   if (is_android) {
+     deps += [ "//ui/compositor" ]
++  }
++}
++
++if (is_mac) {
++  # Focused regression executable for Helium's retained UI and container tabs.
++  test("helium_development_tests") {
++    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
++    sources = [ "base/helium_webui_regression_browsertest.cc" ]
++    deps = [
++      ":browser_tests_runner",
++      ":test_support",
++      ":test_support_ui",
++      "//base",
++      "//chrome:packed_resources",
++      "//chrome/browser/bookmarks",
++      "//chrome/browser/containers:browser_tests",
++      "//chrome/browser/profiles:profile",
++      "//chrome/common",
++      "//chrome/test/base:web_ui_mocha_browser_test",
++      "//components/bookmarks/test:test",
++      "//content/test:test_support",
++    ]
++    data_deps = [
++      "//chrome",
++      "//chrome:browser_tests_pak",
++      "//chrome:chrome_framework",
++      "//chrome/test/data/webui:resources",
++    ]
++    data = [ "data/" ]
+   }
+ }
+
+@@ -3062,10 +3091,6 @@
        "../browser/ui/webid/identity_dialog_controller_browsertest.cc",
        "../common/chrome_paths_browsertest.cc",
        "../common/time_format_browsertest.cc",
@@ -1245,6 +1350,237 @@
        "../renderer/accessibility/read_anything/read_anything_test_utils.cc",
        "../renderer/accessibility/read_anything/read_anything_test_utils.h",
        "../renderer/autofill/autofill_renderer_browsertest.cc",
+--- /dev/null
++++ b/chrome/test/base/helium_webui_regression_browsertest.cc
+@@ -0,0 +1,228 @@
++// Copyright 2023 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Run the retained Helium WebUI suites with the production signed-out profile.
++// Test bodies and JavaScript suites are shared with the upstream WebUI tests.
++#include "base/strings/stringprintf.h"
++#include "build/build_config.h"
++#include "chrome/browser/bookmarks/bookmark_model_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/test/base/web_ui_mocha_browser_test.h"
++#include "components/bookmarks/test/bookmark_test_helpers.h"
++#include "content/public/test/browser_test.h"
++
++class BookmarksBrowserTest : public WebUIMochaBrowserTest {
++ protected:
++  BookmarksBrowserTest() {
++    set_test_loader_host(chrome::kChromeUIBookmarksHost);
++  }
++
++  void SetUpOnMainThread() override {
++    WebUIMochaBrowserTest::SetUpOnMainThread();
++    bookmarks::BookmarkModel* model =
++        BookmarkModelFactory::GetForBrowserContext(browser()->GetProfile());
++    bookmarks::test::WaitForBookmarkModelToLoad(model);
++  }
++};
++using BookmarksTest = BookmarksBrowserTest;
++IN_PROC_BROWSER_TEST_F(BookmarksTest, CommandManager) {
++  RunTest("bookmarks/command_manager_test.js", "mocha.run()");
++}
++
++class HistoryUIBrowserTest : public WebUIMochaBrowserTest {
++ protected:
++  HistoryUIBrowserTest() {
++    set_test_loader_host(chrome::kChromeUIHistoryHost);
++  }
++};
++using HistoryTest = HistoryUIBrowserTest;
++IN_PROC_BROWSER_TEST_F(HistoryTest, Routing) {
++  RunTest("history/history_routing_test.js", "mocha.run()");
++}
++
++class HistoryListTest : public HistoryUIBrowserTest {
++ protected:
++  void RunTestCase(const std::string& testCase) {
++    HistoryUIBrowserTest::RunTest(
++        "history/history_list_test.js",
++        base::StringPrintf("runMochaTest('HistoryListTest', '%s');",
++                           testCase.c_str()));
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, IsEmpty) {
++  RunTestCase("IsEmpty");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeletingSingleItem) {
++  RunTestCase("DeletingSingleItem");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, CancellingSelectionOfMultipleItems) {
++  RunTestCase("CancellingSelectionOfMultipleItems");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       SelectionOfMultipleItemsUsingShiftClick) {
++  RunTestCase("SelectionOfMultipleItemsUsingShiftClick");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DisablingCtrlAOnSyncedTabsPage) {
++  RunTestCase("DisablingCtrlAOnSyncedTabsPage");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, SettingFirstAndLastItems) {
++  RunTestCase("SettingFirstAndLastItems");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, UpdatingHistoryResults) {
++  RunTestCase("UpdatingHistoryResults");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeletingMultipleItemsFromView) {
++  RunTestCase("DeletingMultipleItemsFromView");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       SearchResultsDisplayWithCorrectItemTitle) {
++  RunTestCase("SearchResultsDisplayWithCorrectItemTitle");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       CorrectDisplayMessageWhenNoHistoryAvailable) {
++  RunTestCase("CorrectDisplayMessageWhenNoHistoryAvailable");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       MoreFromThisSiteSendsAndSetsCorrectData) {
++  RunTestCase("MoreFromThisSiteSendsAndSetsCorrectData");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, ChangingSearchDeselectsItems) {
++  RunTestCase("ChangingSearchDeselectsItems");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeleteItemsEndToEnd) {
++  RunTestCase("DeleteItemsEndToEnd");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeleteViaMenuButton) {
++  RunTestCase("DeleteViaMenuButton");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeleteDisabledWhilePending) {
++  RunTestCase("DeleteDisabledWhilePending");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, DeletingItemsUsingShortcuts) {
++  RunTestCase("DeletingItemsUsingShortcuts");
++}
++
++// TODO(crbug.com/421264968): Re-enable flaky test
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++#define MAYBE_DeleteDialogClosedOnBackNavigation \
++  DISABLED_DeleteDialogClosedOnBackNavigation
++#else
++#define MAYBE_DeleteDialogClosedOnBackNavigation \
++  DeleteDialogClosedOnBackNavigation
++#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       MAYBE_DeleteDialogClosedOnBackNavigation) {
++  RunTestCase("DeleteDialogClosedOnBackNavigation");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, ClickingFileUrlSendsMessageToChrome) {
++  RunTestCase("ClickingFileUrlSendsMessageToChrome");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest,
++                       DeleteHistoryResultsInQueryHistoryEvent) {
++  RunTestCase("DeleteHistoryResultsInQueryHistoryEvent");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, SetsScrollTarget) {
++  RunTestCase("SetsScrollTarget");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, SetsScrollOffset) {
++  RunTestCase("SetsScrollOffset");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, AnnouncesExactMatches) {
++  RunTestCase("AnnouncesExactMatches");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, ScrollingLoadsMore) {
++  RunTestCase("ScrollingLoadsMore");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, ResizingLoadsMore) {
++  RunTestCase("ResizingLoadsMore");
++}
++
++IN_PROC_BROWSER_TEST_F(HistoryListTest, SharedMenuClosesOnFocusout) {
++  RunTestCase("SharedMenuClosesOnFocusout");
++}
++
++class SettingsTest : public WebUIMochaBrowserTest {
++ protected:
++  SettingsTest() { set_test_loader_host(chrome::kChromeUISettingsHost); }
++};
++
++class NewTabPageAppTest : public WebUIMochaBrowserTest {
++ protected:
++  NewTabPageAppTest() { set_test_loader_host(chrome::kChromeUINewTabPageHost); }
++};
++
++class SidePanelCustomizeChromeTest : public WebUIMochaBrowserTest {
++ protected:
++  SidePanelCustomizeChromeTest() { set_test_loader_host(chrome::kChromeUICustomizeChromeSidePanelHost); }
++};
++
++class ExtensionsBrowserTest : public WebUIMochaBrowserTest {
++ protected:
++  ExtensionsBrowserTest() { set_test_loader_host(chrome::kChromeUIExtensionsHost); }
++};
++
++IN_PROC_BROWSER_TEST_F(SettingsTest, AppearancePage) {
++  RunTest("settings/appearance_page_test.js", "mocha.run()");
++}
++
++using SettingsPersonalizationOptionsTest = SettingsTest;
++IN_PROC_BROWSER_TEST_F(SettingsPersonalizationOptionsTest, AllBuilds) {
++  RunTest("settings/personalization_options_test.js",
++          "runMochaSuite('AllBuilds')");
++}
++
++IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Helium) {
++  RunTest("new_tab_page/helium_app_test.js", "mocha.run()");
++}
++
++IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Appearance) {
++  RunTest("side_panel/customize_chrome/helium_appearance_test.js", "mocha.run()");
++}
++
++class CrExtensionsSidebarTest : public ExtensionsBrowserTest {
++ protected:
++  void RunTestCase(const std::string& testCase) {
++    ExtensionsBrowserTest::RunTest(
++        "extensions/sidebar_test.js",
++        base::StringPrintf("runMochaTest('ExtensionSidebarTest', '%s');",
++                           testCase.c_str()));
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(CrExtensionsSidebarTest, HrefVerification) {
++  RunTestCase("HrefVerification");
++}
++
++IN_PROC_BROWSER_TEST_F(CrExtensionsSidebarTest, LayoutAndClickHandlers) {
++  RunTestCase("LayoutAndClickHandlers");
++}
++
++IN_PROC_BROWSER_TEST_F(CrExtensionsSidebarTest, SetSelected) {
++  RunTestCase("SetSelected");
++}
++
 --- a/chrome/test/base/testing_browser_process.cc
 +++ b/chrome/test/base/testing_browser_process.cc
 @@ -30,7 +30,9 @@

@@ -371,3 +371,4 @@ helium/core/container-tabs.patch
 helium/core/container-tabs-macos-shortcut.patch
 helium/core/container-tabs-popup-partition.patch
 helium/core/container-tabs-dialog-parent.patch
+helium/core/container-tabs-initial-partition.patch

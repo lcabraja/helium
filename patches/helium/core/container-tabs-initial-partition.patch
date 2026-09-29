@@ -1,0 +1,58 @@
+--- a/content/browser/browsing_instance.cc
++++ b/content/browser/browsing_instance.cc
+@@ -79,3 +79,3 @@
+-  // Some URLs should leave the SiteInstance's site unassigned, though if
+-  // `instance` is for a guest, we should always set the site to ensure that it
+-  // carries guest information contained within SiteInfo.
++  // Some URLs should leave the SiteInstance's site unassigned. Fixed storage
++  // partitions must still set the site so that an initial about:blank page
++  // carries its partition configuration, including guest information.
+@@ -83 +83 @@
+-      isolation_context_.is_guest()) {
++      is_fixed_storage_partition_) {
+--- a/chrome/browser/containers/container_browsertest.cc
++++ b/chrome/browser/containers/container_browsertest.cc
+@@ -16,0 +17,2 @@
++#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
++#include "chrome/browser/resource_coordinator/utils.h"
+@@ -327,0 +330,5 @@
++  // Reload on activation requires a focused browser, even on a test runner
++  // whose native window is not frontmost.
++  auto focused_model = resource_coordinator::GetTabLifecycleUnitSource()
++                           ->SetFocusedTabStripModelForTesting(model);
++  auto* partition = work->GetPrimaryMainFrame()->GetStoragePartition();
+@@ -335,0 +343 @@
++  content::TestNavigationObserver resumed(model->GetWebContentsAt(index));
+@@ -337 +345,4 @@
+-  ASSERT_TRUE(content::WaitForLoadStop(model->GetWebContentsAt(index)));
++  resumed.Wait();
++  ASSERT_TRUE(resumed.last_navigation_succeeded());
++  EXPECT_EQ(partition, model->GetWebContentsAt(index)
++                           ->GetPrimaryMainFrame()->GetStoragePartition());
+@@ -358 +369,25 @@
+-  }
++    content::WebContents::CreateParams params(browser()->GetProfile());
++    params.site_instance = instance;
++    auto tab = content::WebContents::Create(params);
++    auto* partition = tab->GetPrimaryMainFrame()->GetStoragePartition();
++    EXPECT_EQ(config, partition->GetConfig());
++    ASSERT_TRUE(content::NavigateToURL(
++        tab.get(), embedded_test_server()->GetURL("/test")));
++    EXPECT_EQ(partition, tab->GetPrimaryMainFrame()->GetStoragePartition());
++    EXPECT_EQ("", content::EvalJs(tab.get(), "document.cookie"));
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, BlankPageKeepsPartition) {
++  auto* work = Open(Work());
++  ASSERT_TRUE(content::ExecJs(work, "document.cookie = 'account=work; path=/'"));
++  auto* partition = work->GetPrimaryMainFrame()->GetStoragePartition();
++  content::WebContents::CreateParams params(browser()->GetProfile());
++  params.site_instance = CreateSiteInstance(browser()->GetProfile(),
++                                            GURL("about:blank"), Work());
++  auto tab = content::WebContents::Create(params);
++  EXPECT_EQ(partition, tab->GetPrimaryMainFrame()->GetStoragePartition());
++  ASSERT_TRUE(content::NavigateToURL(
++      tab.get(), embedded_test_server()->GetURL("/test")));
++  EXPECT_EQ(partition, tab->GetPrimaryMainFrame()->GetStoragePartition());
++  EXPECT_EQ("account=work", content::EvalJs(tab.get(), "document.cookie"));

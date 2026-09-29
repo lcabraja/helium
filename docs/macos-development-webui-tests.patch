@@ -1,3 +1,21 @@
+--- a/chrome/test/data/webui/bookmarks/command_manager_test.ts
++++ b/chrome/test/data/webui/bookmarks/command_manager_test.ts
+@@ -144,6 +144,7 @@
+       Command.PASTE,
+       Command.DELETE,
+       Command.OPEN_NEW_TAB,
++      Command.OPEN_CONTAINER,
+       Command.OPEN_NEW_WINDOW,
+       Command.OPEN_SPLIT_VIEW,
+       Command.OPEN_NEW_GROUP,
+@@ -197,6 +198,7 @@
+       Command.PASTE,
+       Command.DELETE,
+       Command.OPEN_NEW_TAB,
++      Command.OPEN_CONTAINER,
+       Command.OPEN_NEW_WINDOW,
+       Command.OPEN_SPLIT_VIEW,
+       Command.OPEN_NEW_GROUP,
 --- a/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
 +++ b/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
 @@ -26,6 +26,8 @@
@@ -116,13 +134,18 @@
          await microtasksFinished();
          assertEquals('syncedTabs', sidebar.$.menu.selected);
          assertEquals('chrome://history/syncedTabs', window.location.href);
-@@ -184,8 +188,8 @@
+@@ -183,9 +187,12 @@
+           const searchTerm = 'Soldier76';
            assertEquals('history', sidebar.$.menu.selected);
            navigateTo('/?q=' + searchTerm, app);
-
+-
 -          sidebar.$.syncedTabs.click();
 -          await eventToPromise('iron-select', sidebar.$.menu);
-+          navigateTo('/syncedTabs', app);
++          await microtasksFinished();
++
++          // The removed synced-tabs sidebar link included the current query.
++          // Supply it explicitly when simulating that route transition.
++          navigateTo('/syncedTabs?q=' + searchTerm, app);
 +          await microtasksFinished();
            await microtasksFinished();
            assertEquals('syncedTabs', sidebar.$.menu.selected);
@@ -939,14 +962,14 @@
 +                                  '#browserLayout');
 +         assertTrue(!!dropdown);
 +         const select = dropdown.$.dropdownMenu;
-+         // CLASSIC=0, DYNAMIC=1, VERTICAL=2, COMPACT=3.
++         // CLASSIC=0, COMPACT=1, VERTICAL=2, DYNAMIC=3.
 +         for (const layout of [2, 3, 1, 0]) {
 +           select.value = String(layout);
 +           select.dispatchEvent(new Event('change'));
 +           await microtasksFinished();
 +           assertEquals(layout, prefService.getPref('helium.browser.layout').value);
 +           assertEquals(layout !== 2, toggle('vertical_right_aligned').hidden);
-+           assertEquals(layout === 3, toggle('centered_location_bar').hidden);
++           assertEquals(layout === 1, toggle('centered_location_bar').hidden);
 +         }
 +       });
 +
@@ -1637,12 +1660,12 @@
 +    assertDeepEquals(
 +        theme.backgroundColor,
 +        await background.whenCalled('setBackgroundColor'));
-+    assertTrue(app.hasAttribute('show-background-image'));
++    assertTrue(app.hasAttribute('show-background-image_'));
 +    assertTrue(!!app.shadowRoot.querySelector('#themeAttribution'));
 +    callback.setTheme(createTheme());
 +    await callback.$.flushForTesting();
 +    await microtasksFinished();
-+    assertFalse(app.hasAttribute('show-background-image'));
++    assertFalse(app.hasAttribute('show-background-image_'));
 +    assertEquals(null, app.shadowRoot.querySelector('#themeAttribution'));
 +  });
 +});

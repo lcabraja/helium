@@ -37,13 +37,13 @@ or mix dependency versions to make configuration pass.
 3. For a source checkout containing Chromium's test data, apply
    `docs/container-tabs-webui-tests.patch`, followed by
    `docs/macos-development-webui-tests.patch` and
-   `docs/macos-development-cpp-tests.patch`. Build `browser_tests` and run
+   `docs/macos-development-cpp-tests.patch`. Build `helium_development_tests` and run
    `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
    bookmark, history and settings WebUI checks.
    The small checkout also omits the non-Git test-font archive. Fetch the
    `src/third_party/test_fonts/test_fonts` object specified in Chromium's
    `DEPS`, verify its declared SHA-256 and size, and extract it into that exact
-   directory before building `browser_tests`. Do not substitute system fonts.
+   directory before building the regression executable. Do not substitute system fonts.
 4. Launch the built app with a separate development profile. Follow the UI and
    storage-isolation checks in `docs/container-tabs.md`. Record any check that
    could not run, rather than reporting it as passed.
@@ -82,111 +82,52 @@ pushover-cli send --title Codex 'Helium development build sent to Nausicaa'
 
 Only send that completion message after the build and transfer succeed.
 
-## Katal preparation on 27 September 2026
+## Reproducible toolchain and test scope
 
-The complete Chromium 154.0.8037.57 checkout and pinned DEPS were fetched on
-Katal, using Chromium's GitHub mirror for the root repository. Both Google and
-GitHub resolve that tag to `73c14f6228d7cd537c855007e8f88678969cc0eb`.
-The common and macOS c464a10 patch series applied without fuzz, 365 patches
-in total. The additional WebUI test patch required its context to use Chromium
-154's `contextMenuOpenBookmarkInOffTheRecordWindow` name. After correction,
-it applied without fuzz and its reverse round trip restored the original file.
+The 29 September build uses common upstream `0dbe337`, macOS platform `24af304`
+and Chromium `154.0.8037.57`, commit
+`73c14f6228d7cd537c855007e8f88678969cc0eb`. Xcode 27.0 build `27A266a`, its macOS
+27.0 SDK and Metal toolchain are installed on Katal. Use Chromium's pinned
+Clang, Rust, GN, Siso, Node and DEPS, with `docs/macos-development.gn`.
 
-Retain the full checkout for browser tests. The platform's normal
-`prune_binaries.py` step removes `chrome/test/data` and other test fixtures;
-it was intentionally skipped for this development checkout.
+Retain the complete source checkout. The platform's normal pruning step removes
+browser-test fixtures. Apply the three supplemental patches in the order above;
+they are outside the production series because release source archives omit
+these files. Production and test TypeScript checking remain enabled.
 
-The pinned Clang, Rust, GN, Siso, TypeScript, Go and Node tools were downloaded,
-along with Helium's verified platform resources. GN configuration stopped in
-`build/config/apple/sdk_info.py` because only Command Line Tools were installed:
-`xcodebuild -version` requires full Xcode. Xcode and its Metal component remain
-required. No app compilation, browser tests, UI checks, signing or app delivery
-has completed. The proposed non-component arm64 build targets macOS 15.0 so
-that it can run on Mitsuha's macOS 15.5; that target still needs validation in
-the built binaries.
+`helium_development_tests` links the container browser tests and selected WebUI
+runners using Chromium's normal test launcher and the production browser. Its
+WebUI runners load the existing compiled JavaScript suites for bookmarks,
+history, appearance, personalization, extensions, the Helium new-tab page and
+the wallpaper panel. The settings runners use an ordinary signed-out profile.
+The container tests include storage isolation, navigation inheritance, explicit
+switching, duplication/restoration, hibernation, deletion, filtered cookie
+clearing and persistence across a restart.
 
-## Katal rebase on 29 September 2026
+The full upstream `browser_tests` executable still contains fixtures that link
+against Google sign-in, Safe Browsing and enterprise-analysis services removed
+by Helium. It does not currently link in this configuration. The focused target
+does not claim full Chromium browser-suite coverage or change production flags.
 
-The container-tab commits are rebased onto upstream `0dbe337`, retaining
-Chromium `154.0.8037.57`. The macOS platform is updated to `24af304`, including
-its window-resize fix. The common, macOS and additional WebUI test patches all
-apply to pristine pinned source files without fuzz, 369 patches in total.
-The fork's configuration validation and whitespace checks pass.
+The C++ supplemental patch adapts shared fixtures to Helium's required noise
+maps, disconnected search-engine URL-loader factories and service preferences.
+It also updates older fixtures for Helium's defaults and disabled services.
+WebUI patches provide the retained interfaces and preferences, and replace
+assertions for removed UI with checks of the retained behavior.
 
-Xcode 27.0, build `27A266a`, and its Metal toolchain are installed on Katal.
-The build uses the macOS 27.0 SDK with Chromium's macOS 13.0 compiler target,
-a macOS 15.0 minimum launch version and a non-component arm64 configuration.
-A complete build and runtime validation
-are still required; successful patch application does not establish either.
+Native checks found and fixed container-specific issues in the production
+series: the Cocoa shortcut and its settings label, storage inheritance for
+noopener windows and links, initial blank-page partition assignment, and parent
+relationships for nested macOS sheets.
+The popup regression covers both script-created windows and target-blank links.
+Blank-page tests check the partition before and after the first navigation,
+including deleted or malformed identities. The hibernation fixture explicitly
+sets browser focus and waits for the resume navigation.
+The normal series also fixes About-page update types and the managed-wallpaper
+guard exposed by TypeScript compilation.
 
-## Chromium 154 test fixture compatibility
-
-The full checkout's WebUI tests need a separate test-only compatibility patch,
-`docs/macos-development-webui-tests.patch`. Release archives omit these test
-sources, so this patch is deliberately outside `patches/series`.
-
-The patch fills in Helium's avatar, import, search-engine and system-settings
-interfaces in test doubles. Sync component tests import their types directly
-because Helium no longer re-exports them from `lazy_load.ts`. History tests use
-direct navigation for the synced-tabs route whose sidebar link was removed.
-Assertions for removed extension-store, sign-in and color-scheme controls now
-check their absence.
-
-Appearance fixtures include Helium's layout and zen-mode preferences. Tests
-exercise layout-dependent controls, independent zen-mode pin preferences and
-the native container-management message. The removed Chromium tab-strip
-settings are covered by Helium's layout suite instead. Type-only Sync imports
-have explicit GN path mappings and do not introduce runtime imports of unbundled
-modules.
-
-The new-tab app and wallpaper-panel test registrations select Helium-specific
-suites. Chromium's original suites remain in the source checkout for reference,
-but their Google logo, search, AI, module and wallpaper-search controls are not
-in Helium's templates. The replacement suites check the retained shortcuts,
-customization preferences, background/attribution updates, local wallpaper
-selection, reset, device theme, third-party themes and managed-theme guards.
-Production and test TypeScript checking remain enabled.
-
-Compilation exposed two production inconsistencies: restored About-page update
-controls still had disabled type declarations, and the local wallpaper action
-did not check the managed-theme guard. Both fixes are in the normal patch series.
-The 37 modified container C++/Objective-C++ translation units and the WebUI test
-resources compile with the current Xcode toolchain. Runtime validation remains
-required.
-
-The full test build also needs `docs/macos-development-cpp-tests.patch`.
-It passes explicit empty noise-token maps when standalone Blink fixtures create
-pages and web views, and adds the noise-token update method to page-broadcast
-test doubles. These fixtures have no browser-provided noise tokens. Production
-callers still supply their tokens through the required constructor arguments.
-
-The same C++ test patch supplies disconnected URL-loader factories to search
-engine fixtures and registers their Helium service preferences. Bang requests
-cannot reach a live service from these fixtures. Production search-engine
-services retain their profile-provided network factory.
-
-The C++ compatibility patch also updates browser-process and omnibox test doubles,
-DNS-SD and extension helpers, search-edit arguments, and the retained Google
-engine symbol. Safe Browsing-specific assertions follow its disabled build flag,
-and vertical-tab tests cover Helium's remaining bottom container. These changes
-allow shared test support to compile without restoring removed product features.
-
-Native UI checks found two container issues: macOS needs its shortcut in the
-Cocoa accelerator table and a label in shortcut settings. Noopener windows must
-preserve a fixed storage
-partition when creating a new browsing instance. Both fixes are in the normal
-patch series. The popup regression test now checks storage identity, cookie
-sharing and a null opener for script-created windows and target-blank links.
-
-The manager, editor and deletion dialogs now use the initiating dialog as their
-parent. On macOS, attaching every dialog to the main window queued child sheets
-behind the manager, making Edit and Add appear unresponsive. The picker's
-Manage containers action also keeps the correct parent relationship.
-
-The full-checkout fixtures use Helium's disabled-by-default preloading, error
-pages and search suggestions, and verify changed values survive a restart.
-Layout fixtures use Helium's layout preference and remaining separators. Hover
-expansion is disabled in Helium, so its upstream scenarios are replaced by a
-check that the setting cannot enable it. The four renderer reading-mode suites
-are omitted because the upstream disable-AI patch removes their implementation
-files from the renderer target. Other renderer suites remain in the test build.
+Record actual test results in the delivered build report. Compilation or a
+successful patch replay alone is not a runtime test result. The bundle declares
+macOS 15.0 or newer; the current runtime checks use macOS 27.0. Audit deployment
+targets and bundled dependencies, and report older macOS versions as untested
+unless the app has actually run there.

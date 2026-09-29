@@ -77,7 +77,10 @@ autoninja -C out/Default browser_tests
 out/Default/browser_tests --gtest_filter='ContainerBrowserTest.*'
 ```
 
-For macOS toolchain and build flags, see `docs/macos-development-build.md`.
+For the macOS development build, apply the supplemental patches and use
+`helium_development_tests` as described in `docs/macos-development-build.md`.
+The full upstream `browser_tests` executable does not currently link against
+Helium's removed Google services.
 The tests cover storage
 separation, same-container sharing, BroadcastChannel separation, cross-site
 navigation, link and popup inheritance, duplicate and closed-tab restore,
