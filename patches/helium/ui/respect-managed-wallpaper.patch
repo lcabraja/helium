@@ -1,12 +1,14 @@
 --- a/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
 +++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
-@@ -306,6 +306,9 @@
+@@ -305,8 +305,11 @@
+     }
    }
- 
+
    protected onUploadedImageButtonClick_() {
 +    if (this.handleClickForManagedThemes_()) {
 +      return;
 +    }
      this.apiProxy_.handler.chooseLocalCustomBackground();
    }
- 
+
+   protected onSearchedImageButtonClick_() {

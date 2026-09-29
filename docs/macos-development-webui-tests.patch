@@ -54,7 +54,7 @@
 -import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 +import {assertDeepEquals, assertEquals, assertFalse} from 'chrome://webui-test/chai_assert.js';
  import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
- 
+
  import {testVisible} from './test_util.js';
 @@ -52,7 +52,7 @@
          // enableEnhancedSiteControls is set to false.
@@ -62,7 +62,7 @@
          boundTestVisible('#sectionsShortcuts', true);
 -        boundTestVisible('#moreExtensions', true);
 +        boundTestVisible('#moreExtensions', false);
- 
+
          sidebar.enableEnhancedSiteControls = true;
          await microtasksFinished();
 @@ -91,7 +91,6 @@
@@ -79,7 +79,7 @@
 @@ -57,12 +57,16 @@
        return microtasksFinished();
      });
- 
+
 +    test('synced tabs have no sidebar entry', () => {
 +      assertEquals(null, sidebar.shadowRoot.querySelector('#syncedTabs'));
 +    });
@@ -87,17 +87,17 @@
      test('changing route changes active view', async () => {
        assertEquals('history', app.$.content.selected);
        assertEquals(app.$.history, app.$.tabsContent.selectedItem);
- 
+
        navigateTo('/syncedTabs', app);
 -      await eventToPromise('iron-select', sidebar.$.menu);
 +      await microtasksFinished();
- 
+
        assertEquals('chrome://history/syncedTabs', window.location.href);
        await microtasksFinished();
 @@ -115,8 +119,8 @@
        assertEquals('history', sidebar.$.menu.selected);
        assertEquals('chrome://history/', window.location.href);
- 
+
 -      sidebar.$.syncedTabs.click();
 -      await eventToPromise('iron-select', sidebar.$.menu);
 +      navigateTo('/syncedTabs', app);
@@ -108,7 +108,7 @@
 @@ -138,8 +142,8 @@
          assertEquals('grouped', sidebar.$.menu.selected);
          assertEquals('chrome://history/grouped', window.location.href);
- 
+
 -        keyDownOn(sidebar.$.syncedTabs, 0, [], ' ');
 -        await eventToPromise('iron-select', sidebar.$.menu);
 +        navigateTo('/syncedTabs', app);
@@ -119,7 +119,7 @@
 @@ -184,8 +188,8 @@
            assertEquals('history', sidebar.$.menu.selected);
            navigateTo('/?q=' + searchTerm, app);
- 
+
 -          sidebar.$.syncedTabs.click();
 -          await eventToPromise('iron-select', sidebar.$.menu);
 +          navigateTo('/syncedTabs', app);
@@ -141,9 +141,9 @@
 --- a/chrome/test/data/webui/new_tab_page/new_tab_page_browsertest.cc
 +++ b/chrome/test/data/webui/new_tab_page/new_tab_page_browsertest.cc
 @@ -300,158 +300,10 @@
- 
+
  using NewTabPageAppTest = NewTabPageBrowserTest;
- 
+
 -IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Misc) {
 -  RunTest("new_tab_page/app_test.js",
 -          "runMochaSuite('NewTabPageAppTest Misc')");
@@ -301,13 +301,30 @@
 +IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Helium) {
 +  RunTest("new_tab_page/helium_app_test.js", "mocha.run()");
  }
- 
+
  class NewTabPageModulesMostRelevantTabResumptionModuleTest
+--- a/chrome/test/data/webui/settings/BUILD.gn
++++ b/chrome/test/data/webui/settings/BUILD.gn
+@@ -277,6 +277,14 @@
+   }
+
+   ts_path_mappings = [
++    # These are type-only imports. The components are still loaded by
++    # lazy_load.js, but Helium no longer re-exports their types there.
++    "chrome://settings/people_page/sync_controls.js|" + rebase_path(
++            "$root_gen_dir/chrome/browser/resources/settings/tsc/people_page/sync_controls.d.ts",
++            target_gen_dir),
++    "chrome://settings/people_page/sync_page.js|" + rebase_path(
++            "$root_gen_dir/chrome/browser/resources/settings/tsc/people_page/sync_page.d.ts",
++            target_gen_dir),
+     # Settings tests should only be importing from one of the URLs below, so
+     # that tests work both in optimize_webui=true/false modes.
+     "chrome://settings/privacy_sandbox/*|" + rebase_path(
 --- a/chrome/test/data/webui/settings/appearance_page_test.ts
 +++ b/chrome/test/data/webui/settings/appearance_page_test.ts
 @@ -3,11 +3,11 @@
  // found in the LICENSE file.
- 
+
  import type {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 -import type {CustomizeColorSchemeModeClientRemote, SettingsAppearancePageElement, SettingsDropdownMenuElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
 -import {AppearanceBrowserProxyImpl, ColorSchemeMode, customizeColorSchemeModeBrowserProxyFactory, CustomizeColorSchemeModeHandlerRemote, loadTimeData, MetricsBrowserProxyImpl, PrefsBrowserProxy, PrefService, SystemTheme} from 'chrome://settings/settings.js';
@@ -317,7 +334,7 @@
  import {TestMock} from 'chrome://webui-test/test_mock.js';
 -import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 +import {microtasksFinished} from 'chrome://webui-test/test_util.js';
- 
+
  import {TestAppearanceBrowserProxy} from './test_appearance_browser_proxy.js';
  import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 @@ -18,7 +18,6 @@
@@ -326,10 +343,10 @@
      CustomizeColorSchemeModeHandlerRemote;
 -let colorSchemeCallbackRouter: CustomizeColorSchemeModeClientRemote;
  let metricsBrowserProxy: TestMetricsBrowserProxy;
- 
+
  let prefService: PrefService;
-@@ -30,11 +29,10 @@
- 
+@@ -30,13 +29,67 @@
+
    colorSchemeHandler =
        TestMock.fromClass(CustomizeColorSchemeModeHandlerRemote);
 -  const {instance, remote} =
@@ -338,17 +355,74 @@
            colorSchemeHandler);
    customizeColorSchemeModeBrowserProxyFactory.setInstance(instance);
 -  colorSchemeCallbackRouter = remote;
- 
+
    const fakePrefs = [
++    {
++      key: 'helium.browser.layout',
++      type: chrome.settingsPrivate.PrefType.NUMBER,
++      value: 0,
++    },
++    {
++      key: 'helium.browser.vertical_right_aligned',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.centered_location_bar',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.minimal_location_bar',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.show_progress_bar',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.zen_mode',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.zen_mode_sidebar_pinned',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.zen_mode_top_chrome_pinned',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.rounded_frame',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.native_frame_materials',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
++    {
++      key: 'helium.browser.show_zoom_indicator',
++      type: chrome.settingsPrivate.PrefType.BOOLEAN,
++      value: false,
++    },
      {
-@@ -238,14 +236,16 @@
+       key: 'autogenerated.theme.policy.color',
+       type: chrome.settingsPrivate.PrefType.NUMBER,
+@@ -238,14 +291,16 @@
      // No custom nor system theme in use; "USE CLASSIC" should be hidden.
      assertFalse(!!appearancePage.shadowRoot.querySelector('#useDefault'));
      // The color scheme toggle should be visible when the classic theme is used.
 -    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeRow'));
- 
+
      await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.GTK);
      await microtasksFinished();
      // If the system theme is in use, "USE CLASSIC" should show.
@@ -357,43 +431,43 @@
 -    assertFalse(isVisible(appearancePage.$.colorSchemeModeRow));
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeRow'));
- 
+
      await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.DEFAULT);
      await prefService.setPrefValue(THEME_ID_PREF, 'fake theme id');
-@@ -269,7 +269,8 @@
+@@ -269,7 +324,8 @@
      // The "USE GTK+" button shouldn't be showing if it's already in use.
      assertFalse(!!appearancePage.shadowRoot.querySelector('#useGtk'));
      // The color scheme toggle should be hidden when the GTK theme is used.
 -    assertFalse(isVisible(appearancePage.$.colorSchemeModeRow));
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeRow'));
- 
+
      appearanceBrowserProxy.setIsChildAccount(true);
      await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.DEFAULT);
-@@ -283,7 +284,8 @@
+@@ -283,7 +339,8 @@
              .querySelector<HTMLElement>('#themesSecondaryActions')!.hidden);
      // The color scheme toggle should be visible when the classic theme is used,
      // for child accounts.
 -    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeRow'));
- 
+
      appearanceBrowserProxy.setIsChildAccount(false);
      await prefService.setPrefValue(THEME_ID_PREF, 'fake theme id');
-@@ -294,7 +296,8 @@
+@@ -294,7 +351,8 @@
          appearancePage.shadowRoot
              .querySelector<HTMLElement>('#themesSecondaryActions')!.hidden);
      // The color scheme toggle should be visible when a custom theme is used.
 -    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeRow'));
- 
+
      const button =
          appearancePage.shadowRoot.querySelector<HTMLElement>('#useGtk');
-@@ -482,27 +485,11 @@
+@@ -482,27 +540,11 @@
          '#resetPinnedToolbarActions'));
    });
- 
+
 -  test('ColorSchemeMode', async () => {
 -    colorSchemeHandler.reset();
 -    await createAppearancePage();
@@ -421,8 +495,501 @@
 +    assertEquals(null, appearancePage.shadowRoot.querySelector(
 +        '#colorSchemeModeSelect'));
    });
- 
+
    test('default zoom handling', async function() {
+@@ -575,38 +617,11 @@
+
+
+
+-  test('show split view drag and drop options', async function() {
+-    loadTimeData.overrideValues({
+-      showSplitViewDragAndDropSetting: true,
+-    });
+-    await createAppearancePage();
+-    assertTrue(
+-        !!appearancePage.shadowRoot.querySelector('#splitViewDragAndDrop'));
+-    assertFalse(appearancePage.shadowRoot
+-                    .querySelector<SettingsToggleButtonElement>(
+-                        '#splitViewDragAndDrop')!.hidden);
+-  });
+-
+-  test('split view drag and drop toggle updates pref', async function() {
+-    loadTimeData.overrideValues({
+-      showSplitViewDragAndDropSetting: true,
+-    });
+-    await createAppearancePage();
+-    await prefService.setPrefValue(
+-        'browser.split_view_drag_and_drop_enabled', true);
+-    await microtasksFinished();
+-
+-    const toggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#splitViewDragAndDrop');
+-    assertTrue(!!toggle);
+-    assertTrue(toggle.checked);
+-
+-    toggle.click();
+-    await microtasksFinished();
+-    assertFalse(
+-        prefService.getPref<boolean>('browser.split_view_drag_and_drop_enabled')
+-            .value);
++  test('removed split view controls remain absent', async () => {
++    loadTimeData.overrideValues({showSplitViewDragAndDropSetting: true});
++    await createAppearancePage();
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#splitViewDragAndDrop'));
+   });
+
+   test('ShowSavedTabGroupsHiddenWithProjectsPanel', async function() {
+@@ -624,8 +639,7 @@
+     const autoPinToggle =
+         appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+             '#autoPinNewTabGroups');
+-    assertTrue(!!autoPinToggle);
+-    assertTrue(autoPinToggle.hidden);
++    assertEquals(null, autoPinToggle);
+   });
+
+   test('bookmarks bar toggle visibility', async function() {
+@@ -697,371 +711,78 @@
+       });
+ });
+
+-suite('TabStripPositionSettings', () => {
+-  let metricsBrowserProxy: TestMetricsBrowserProxy;
+-
+-  setup(() => {
+-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+-
+-    appearanceBrowserProxy = new TestAppearanceBrowserProxy();
+-    AppearanceBrowserProxyImpl.setInstance(appearanceBrowserProxy);
+-
+-    metricsBrowserProxy = new TestMetricsBrowserProxy();
+-    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+-
+-    return createAppearancePage();
+-  });
+-
+-  test('Dropdown menu updates vertical_tabs.enabled.value', async function() {
+-    assertFalse(prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-
+-    const dropdown =
+-        appearancePage.shadowRoot.querySelector<SettingsDropdownMenuElement>(
+-            '#tabStripPosition');
+-    assertTrue(!!dropdown);
+-
+-    const selectElement = dropdown.$.dropdownMenu;
+-    assertTrue(!!selectElement);
+-
+-    assertEquals('false', selectElement.value);
+-
+-    selectElement.value = 'true';
+-    selectElement.dispatchEvent(new Event('change'));
+-    await microtasksFinished();
+-
+-    assertTrue(prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-    assertEquals('true', selectElement.value);
+-
+-    selectElement.value = 'false';
+-    selectElement.dispatchEvent(new Event('change'));
+-    await microtasksFinished();
+-
+-    assertFalse(prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-    assertEquals('false', selectElement.value);
+-  });
+-
+-  test('Dropdown menu records user actions', async function() {
+-    assertFalse(prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-
+-    const dropdown =
+-        appearancePage.shadowRoot.querySelector<SettingsDropdownMenuElement>(
+-            '#tabStripPosition');
+-    assertTrue(!!dropdown);
+-
+-    const selectElement = dropdown.$.dropdownMenu;
+-    assertTrue(!!selectElement);
+-    assertEquals('false', selectElement.value);
+-
+-    selectElement.value = 'true';
+-    selectElement.dispatchEvent(new Event('change'));
+-    const verticalEnabled = await appearanceBrowserProxy.whenCalled(
+-        'recordVerticalTabStripModeChanged');
+-    assertTrue(verticalEnabled);
+-
+-    appearanceBrowserProxy.reset();
+-
+-    selectElement.value = 'false';
+-    selectElement.dispatchEvent(new Event('change'));
+-    const horizontalEnabled = await appearanceBrowserProxy.whenCalled(
+-        'recordVerticalTabStripModeChanged');
+-    assertFalse(horizontalEnabled);
+-  });
+-});
+-
+-suite('VerticalTabsExpandOnHoverSettings', () => {
++suite('HeliumBrowserLayoutSettings', () => {
+   setup(async () => {
+-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+-
+-    loadTimeData.overrideValues({
+-      showVerticalTabsExpandOnHoverEnabled: true,
+-    });
+-
+-    appearanceBrowserProxy = new TestAppearanceBrowserProxy();
+-    AppearanceBrowserProxyImpl.setInstance(appearanceBrowserProxy);
+-
+-    await createAppearancePage();
+-    await prefService.setPrefValue('vertical_tabs.enabled', true);
+-    await microtasksFinished();
+-  });
+-
+-  test('Toggle updates vertical_tabs.expand_on_hover pref', async function() {
+-    assertTrue(prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-    assertFalse(
+-        prefService.getPref<boolean>('vertical_tabs.expand_on_hover').value);
+-
+-    const toggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showVerticalTabsExpandOnHover');
+-    assertTrue(!!toggle);
+-    assertFalse(toggle.checked);
+-
+-    toggle.click();
+-    await microtasksFinished();
+-
+-    assertTrue(
+-        prefService.getPref<boolean>('vertical_tabs.expand_on_hover').value);
+-    assertTrue(toggle.checked);
+-
+-    toggle.click();
+-    await microtasksFinished();
+-
+-    assertFalse(
+-        prefService.getPref<boolean>('vertical_tabs.expand_on_hover').value);
+-    assertFalse(toggle.checked);
+-  });
+-
+-  test('Toggle is hidden when feature flag is disabled', async function() {
+-    loadTimeData.overrideValues({
+-      showVerticalTabsExpandOnHoverEnabled: false,
+-    });
+-
+-    await createAppearancePage();
+-    await prefService.setPrefValue('vertical_tabs.enabled', true);
+-    await microtasksFinished();
+-
+-    const toggle = appearancePage.shadowRoot.querySelector(
+-        '#showVerticalTabsExpandOnHover');
+-    assertTrue(!toggle);
+-  });
+-
+-  test(
+-      'Toggle is hidden when vertical tabs pref is disabled', async function() {
+-        await createAppearancePage();
+-        await prefService.setPrefValue('vertical_tabs.enabled', false);
+-        await microtasksFinished();
+-
+-        const toggle = appearancePage.shadowRoot.querySelector(
+-            '#showVerticalTabsExpandOnHover');
+-
+-        assertTrue(!toggle);
+-      });
+-});
+-
+-suite('TabScrollButtonsSettings', () => {
+-  setup(async () => {
+-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+-
+-    loadTimeData.overrideValues({
+-      tabStripUnificationEnabled: true,
+-    });
+-
+     appearanceBrowserProxy = new TestAppearanceBrowserProxy();
+     AppearanceBrowserProxyImpl.setInstance(appearanceBrowserProxy);
+     metricsBrowserProxy = new TestMetricsBrowserProxy();
+     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+-
+-    await createAppearancePage();
+-    await prefService.setPrefValue('vertical_tabs.enabled', false);
+-    await microtasksFinished();
+-  });
+-
+-  test('Toggle records metrics', async function() {
+-    const toggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#tabScrollAutoShowOnOverflow');
+-    assertTrue(!!toggle);
+-    toggle.click();
+-    let action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('Settings_Appearance_TabScrollButtons_Unpinned', action);
+-
+-    metricsBrowserProxy.resetResolver('recordAction');
+-    toggle.click();
+-    action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('Settings_Appearance_TabScrollButtons_Pinned', action);
+-  });
+-
+-  test(
+-      'Toggle updates tab_scroll_buttons.pinned_to_tabstrip pref',
+-      async function() {
+-        assertFalse(
+-            prefService.getPref<boolean>('vertical_tabs.enabled').value);
+-        assertTrue(
+-            prefService
+-                .getPref<boolean>('tab_scroll_buttons.pinned_to_tabstrip')
+-                .value);
+-
+-        const toggle = appearancePage.shadowRoot
+-                           .querySelector<SettingsToggleButtonElement>(
+-                               '#tabScrollAutoShowOnOverflow');
+-        assertTrue(!!toggle);
+-        assertTrue(toggle.checked);
+-
+-        toggle.click();
+-        await microtasksFinished();
+-
+-        assertFalse(
+-            prefService
+-                .getPref<boolean>('tab_scroll_buttons.pinned_to_tabstrip')
+-                .value);
+-        assertFalse(toggle.checked);
+-
+-        toggle.click();
+-        await microtasksFinished();
+-
+-        assertTrue(
+-            prefService
+-                .getPref<boolean>('tab_scroll_buttons.pinned_to_tabstrip')
+-                .value);
+-        assertTrue(toggle.checked);
+-      });
+-
+-  test('Toggle is hidden when vertical tabs pref is enabled', async function() {
+-    await prefService.setPrefValue('vertical_tabs.enabled', true);
+-    await microtasksFinished();
+-
+-    const toggle =
+-        appearancePage.shadowRoot.querySelector('#tabScrollAutoShowOnOverflow');
+-    assertTrue(!!toggle);
+-    assertTrue(toggle.parentElement!.hasAttribute('hidden'));
+-  });
+-
+-  test(
+-      'Toggle is not rendered when tabStripUnification is disabled',
+-      async function() {
+-        loadTimeData.overrideValues({
+-          tabStripUnificationEnabled: false,
+-        });
+-        await createAppearancePage();
+-        await prefService.setPrefValue('vertical_tabs.enabled', false);
+-        await microtasksFinished();
+-
+-        const toggle = appearancePage.shadowRoot.querySelector(
+-            '#tabScrollAutoShowOnOverflow');
+-        assertFalse(!!toggle);
+-      });
+-});
+-
+-suite('TabStripComboButtonSettings', () => {
+-  let metricsBrowserProxy: TestMetricsBrowserProxy;
+-
+-  setup(() => {
+-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+-
+-    loadTimeData.overrideValues({
+-      showOrganizerPanelEnabled: true,
+-    });
+-
+-    appearanceBrowserProxy = new TestAppearanceBrowserProxy();
+-    AppearanceBrowserProxyImpl.setInstance(appearanceBrowserProxy);
+-
+-    metricsBrowserProxy = new TestMetricsBrowserProxy();
+-    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+-
+-    return createAppearancePage();
+-  });
+-
+-  test('Toggles update correct prefs', async function() {
+-    assertTrue(
+-        prefService.getPref<boolean>('tab_search.pinned_to_tabstrip').value);
+-    assertTrue(
+-        prefService.getPref<boolean>('organizer_panel.pinned_to_tabstrip')
+-            .value);
+-
+-    const tabSearchToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showTabSearchButton');
+-    assertTrue(!!tabSearchToggle);
+-    assertTrue(tabSearchToggle.checked);
+-
+-    const projectsToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showOrganizerPanelButton');
+-    assertTrue(!!projectsToggle);
+-    assertTrue(projectsToggle.checked);
+-
+-    tabSearchToggle.click();
+-    await microtasksFinished();
+-    assertFalse(
+-        prefService.getPref<boolean>('tab_search.pinned_to_tabstrip').value);
+-
+-    projectsToggle.click();
+-    await microtasksFinished();
+-    assertFalse(
+-        prefService.getPref<boolean>('organizer_panel.pinned_to_tabstrip')
+-            .value);
+-  });
+-
+-  test('Toggles record metrics', async function() {
+-    const tabSearchToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showTabSearchButton');
+-    assertTrue(!!tabSearchToggle);
+-    tabSearchToggle.click();
+-    let action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('TabStripComboButton.TabSearch.Unpinned', action);
+-
+-    metricsBrowserProxy.resetResolver('recordAction');
+-    tabSearchToggle.click();
+-    action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('TabStripComboButton.TabSearch.Pinned', action);
+-
+-    const projectsToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showOrganizerPanelButton');
+-    assertTrue(!!projectsToggle);
+-    metricsBrowserProxy.resetResolver('recordAction');
+-    projectsToggle.click();
+-    action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('TabStripComboButton.OrganizerPanel.Unpinned', action);
+-  });
+-
+-  test('Everything menu toggle updates correct pref', async function() {
+-    loadTimeData.overrideValues({
+-      showOrganizerPanelEnabled: false,
+-      showEverythingMenuEnabled: true,
+-    });
+-    await createAppearancePage();
+-
+-    assertTrue(
+-        prefService.getPref<boolean>('everything_menu.pinned_to_tabstrip')
+-            .value);
+-
+-    const everythingToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showEverythingMenuButton');
+-    assertTrue(!!everythingToggle);
+-    assertTrue(everythingToggle.checked);
+-
+-    everythingToggle.click();
+-    await microtasksFinished();
+-    assertFalse(
+-        prefService.getPref<boolean>('everything_menu.pinned_to_tabstrip')
+-            .value);
+-  });
+-
+-  test('Everything menu toggle records metrics', async function() {
+-    loadTimeData.overrideValues({
+-      showOrganizerPanelEnabled: false,
+-      showEverythingMenuEnabled: true,
+-    });
+-    await createAppearancePage();
+-
+-    const everythingToggle =
+-        appearancePage.shadowRoot.querySelector<SettingsToggleButtonElement>(
+-            '#showEverythingMenuButton');
+-    assertTrue(!!everythingToggle);
+-
+-    everythingToggle.click();
+-    const action = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('TabStripComboButton.EverythingMenu.Unpinned', action);
+-
+-    metricsBrowserProxy.resetResolver('recordAction');
+-    everythingToggle.click();
+-    const action2 = await metricsBrowserProxy.whenCalled('recordAction');
+-    assertEquals('TabStripComboButton.EverythingMenu.Pinned', action2);
+-  });
+-
+-  test('Toggles hidden when disabled', async function() {
+-    loadTimeData.overrideValues({
+-      showOrganizerPanelEnabled: false,
+-      showEverythingMenuEnabled: false,
+-    });
+-    await createAppearancePage();
+-
+-    assertFalse(
+-        !!appearancePage.shadowRoot.querySelector('#showOrganizerPanelButton'));
+-    assertFalse(
+-        !!appearancePage.shadowRoot.querySelector('#showEverythingMenuButton'));
++    await createAppearancePage();
++  });
++
++  function toggle(key: string): SettingsToggleButtonElement {
++    const element = appearancePage.shadowRoot
++                        .querySelector<SettingsToggleButtonElement>(
++                            `[pref-key="helium.browser.${key}"]`);
++    assertTrue(!!element);
++    return element;
++  }
++
++  test('layout selection updates preferences and conditional controls',
++       async () => {
++         const dropdown = appearancePage.shadowRoot
++                              .querySelector<SettingsDropdownMenuElement>(
++                                  '#browserLayout');
++         assertTrue(!!dropdown);
++         const select = dropdown.$.dropdownMenu;
++         // CLASSIC=0, DYNAMIC=1, VERTICAL=2, COMPACT=3.
++         for (const layout of [2, 3, 1, 0]) {
++           select.value = String(layout);
++           select.dispatchEvent(new Event('change'));
++           await microtasksFinished();
++           assertEquals(layout, prefService.getPref('helium.browser.layout').value);
++           assertEquals(layout !== 2, toggle('vertical_right_aligned').hidden);
++           assertEquals(layout === 3, toggle('centered_location_bar').hidden);
++         }
++       });
++
++  test('zen mode retains separate sidebar and toolbar preferences', async () => {
++    await prefService.setPrefValue('helium.browser.layout', 2);
++    await microtasksFinished();
++    const sidebar = toggle('zen_mode_sidebar_pinned');
++    const toolbar = toggle('zen_mode_top_chrome_pinned');
++    assertTrue(sidebar.parentElement!.hidden);
++    toggle('zen_mode').click();
++    await microtasksFinished();
++    assertTrue(prefService.getPref<boolean>('helium.browser.zen_mode').value);
++    assertFalse(sidebar.parentElement!.hidden);
++    sidebar.click();
++    await microtasksFinished();
++    assertTrue(prefService.getPref<boolean>(
++        'helium.browser.zen_mode_sidebar_pinned').value);
++    assertFalse(prefService.getPref<boolean>(
++        'helium.browser.zen_mode_top_chrome_pinned').value);
++    toolbar.click();
++    await microtasksFinished();
++    assertTrue(prefService.getPref<boolean>(
++        'helium.browser.zen_mode_top_chrome_pinned').value);
++  });
++
++  test('container management action reaches the native handler', () => {
++    const row = appearancePage.shadowRoot.querySelector<CrLinkRowElement>(
++        '#toolbarRow cr-link-row');
++    assertTrue(!!row);
++    assertEquals(loadTimeData.getString('containerManage'), row.label);
++    const originalSend = chrome.send;
++    const messages: string[] = [];
++    try {
++      chrome.send = (message: string) => messages.push(message);
++      row.click();
++      assertEquals(1, messages.length);
++      assertEquals('manageContainers', messages[0]);
++    } finally {
++      chrome.send = originalSend;
++    }
+   });
+ });
+
 --- a/chrome/test/data/webui/settings/import_data_dialog_test.ts
 +++ b/chrome/test/data/webui/settings/import_data_dialog_test.ts
 @@ -50,6 +50,7 @@
@@ -449,6 +1016,14 @@
        favorites: true,
        history: false,
        index: 2,
+@@ -95,6 +98,7 @@
+       createBooleanPref('import_dialog_saved_passwords'),
+       createBooleanPref('import_dialog_search_engine'),
+       createBooleanPref('import_dialog_autofill_form_data'),
++      createBooleanPref('import_dialog_extensions'),
+       createBooleanPref('bookmark_bar.show_on_all_tabs'),
+     ];
+   }
 --- a/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
 +++ b/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
 @@ -24,6 +24,9 @@
@@ -488,7 +1063,7 @@
        },
      ]);
 @@ -67,6 +76,18 @@
- 
+
    setProfileIconToDefaultAvatar(index: number) {
      this.methodCalled('setProfileIconToDefaultAvatar', [index]);
 +  }
@@ -504,13 +1079,13 @@
 +  clearCustomAvatar() {
 +    this.methodCalled('clearCustomAvatar');
    }
- 
+
    setProfileName(name: string) {
 --- a/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
 +++ b/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
 @@ -6,7 +6,7 @@
  import 'chrome://settings/lazy_load.js';
- 
+
  import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 -import type {SettingsSyncControlsElement} from 'chrome://settings/lazy_load.js';
 +import type {SettingsSyncControlsElement} from 'chrome://settings/people_page/sync_controls.js';
@@ -521,7 +1096,7 @@
 +++ b/chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts
 @@ -6,7 +6,8 @@
  import 'chrome://settings/lazy_load.js';
- 
+
  import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 -import type {CrInputElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
 +import type {SettingsSyncPageElement} from 'chrome://settings/people_page/sync_page.js';
@@ -533,7 +1108,7 @@
 +++ b/chrome/test/data/webui/settings/people_page_sync_page_test.ts
 @@ -6,7 +6,8 @@
  import 'chrome://settings/lazy_load.js';
- 
+
  import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 -import type {CrExpandButtonElement, CrInputElement, SettingsSyncEncryptionOptionsElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
 +import type {SettingsSyncPageElement} from 'chrome://settings/people_page/sync_page.js';
@@ -545,18 +1120,18 @@
 +++ b/chrome/test/data/webui/settings/personalization_options_test.ts
 @@ -19,9 +19,6 @@
  // </if>
- 
+
  // <if expr="not is_chromeos">
 -import {eventToPromise} from 'chrome://webui-test/test_util.js';
 -import {ChromeSigninUserChoice} from 'chrome://settings/settings.js';
 -import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
- 
+
  // </if>
- 
+
 @@ -96,263 +93,14 @@
      resetPageVisibilityForTesting();
    });
- 
+
 -  // <if expr="not is_chromeos">
 -  test('chromeSigninUserChoiceAvailableInitialization', async function() {
 -    assertFalse(isVisible(testElement.$.chromeSigninUserChoiceSelection));
@@ -822,7 +1397,7 @@
 +      assertEquals(null, testElement.shadowRoot.querySelector(selector));
 +    }
 +  });
- 
+
    test('searchAggregatorSuggestNotShown', function() {
      loadTimeData.overrideValues({showSearchAggregatorSuggest: false});
 --- a/chrome/test/data/webui/settings/system_page_test.ts
@@ -838,7 +1413,7 @@
 +  openKeyboardShortcutsSettings() {
 +    this.methodCalled('openKeyboardShortcutsSettings');
    }
- 
+
    showProxySettings() {
 --- a/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
 +++ b/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
@@ -861,7 +1436,7 @@
 --- a/chrome/test/data/webui/side_panel/customize_chrome/BUILD.gn
 +++ b/chrome/test/data/webui/side_panel/customize_chrome/BUILD.gn
 @@ -9,7 +9,7 @@
- 
+
    files = [
      "app_test.ts",
 -    "appearance_test.ts",
@@ -873,12 +1448,12 @@
 +++ b/chrome/test/data/webui/side_panel/customize_chrome/customize_chrome_browsertest.cc
 @@ -42,7 +42,7 @@
  }
- 
+
  IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Appearance) {
 -  RunTest("side_panel/customize_chrome/appearance_test.js", "mocha.run()");
 +  RunTest("side_panel/customize_chrome/helium_appearance_test.js", "mocha.run()");
  }
- 
+
  IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Categories) {
 --- a/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
 +++ b/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
