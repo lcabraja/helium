@@ -26,6 +26,11 @@ or mix dependency versions to make configuration pass.
    flags. It records this development configuration and disables precompiled
    headers, whose Chromium 154 Apple build rules produce incorrect output
    paths. Run GN with `--fail-on-unused-args` before compiling.
+   Keep Chromium's macOS 13.0 compile-time deployment target and use the
+   separate `mac_min_system_version = "15.0"` launch requirement. Raising the
+   compiler target to 15.0 makes CoreGraphics APIs used by WebRTC's compiled
+   legacy capture backends unavailable. This is separate from the SDK version;
+   the build still uses the current Xcode SDK and retains ScreenCaptureKit.
 2. Resolve patch, GN, compiler and linker failures in the maintained patches.
    Reapply patches to confirm fixes survive a fresh build. Do not leave fixes
    only in the generated Chromium tree.
@@ -108,8 +113,9 @@ apply to pristine pinned source files without fuzz, 369 patches in total.
 The fork's configuration validation and whitespace checks pass.
 
 Xcode 27.0, build `27A266a`, and its Metal toolchain are installed on Katal.
-The build uses the macOS 27.0 SDK with a macOS 15.0 deployment target and a
-non-component arm64 configuration. A complete build and runtime validation
+The build uses the macOS 27.0 SDK with Chromium's macOS 13.0 compiler target,
+a macOS 15.0 minimum launch version and a non-component arm64 configuration.
+A complete build and runtime validation
 are still required; successful patch application does not establish either.
 
 ## Chromium 154 test fixture compatibility
@@ -124,6 +130,13 @@ because Helium no longer re-exports them from `lazy_load.ts`. History tests use
 direct navigation for the synced-tabs route whose sidebar link was removed.
 Assertions for removed extension-store, sign-in and color-scheme controls now
 check their absence.
+
+Appearance fixtures include Helium's layout and zen-mode preferences. Tests
+exercise layout-dependent controls, independent zen-mode pin preferences and
+the native container-management message. The removed Chromium tab-strip
+settings are covered by Helium's layout suite instead. Type-only Sync imports
+have explicit GN path mappings and do not introduce runtime imports of unbundled
+modules.
 
 The new-tab app and wallpaper-panel test registrations select Helium-specific
 suites. Chromium's original suites remain in the source checkout for reference,

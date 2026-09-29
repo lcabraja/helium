@@ -9,7 +9,10 @@ blink_symbol_level = 0
 v8_symbol_level = 0
 chrome_pgo_phase = 0
 use_system_xcode = true
-mac_deployment_target = "15.0"
+# Keep Chromium's compile-time availability baseline. WebRTC still builds
+# legacy capture backends whose APIs are obsoleted at a 15.0 deployment target.
+# The separate launch requirement can remain macOS 15.0.
+mac_deployment_target = "13.0"
 mac_min_system_version = "15.0"
 devtools_skip_typecheck = false
 
