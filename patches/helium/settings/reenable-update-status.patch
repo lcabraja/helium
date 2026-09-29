@@ -18,3 +18,14 @@
        <div id="updateStatusMessage" ?hidden="${!this.showUpdateStatus_}">
          <div role="alert" aria-live="polite"
              .innerHTML="${this.getUpdateStatusMessage_()}">
+--- a/chrome/browser/resources/settings/about_page/about_page.ts
++++ b/chrome/browser/resources/settings/about_page/about_page.ts
+@@ -51,7 +51,7 @@
+ export interface SettingsAboutPageElement {
+   $: {
+     productLogo: HTMLImageElement,
+-    // <if expr="False">
++    // <if expr="not is_chromeos">
+     deprecationWarning: HTMLElement,
+     updateStatusMessage: HTMLElement,
+     // </if>
