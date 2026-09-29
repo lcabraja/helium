@@ -77,10 +77,14 @@ autoninja -C out/Default browser_tests
 out/Default/browser_tests --gtest_filter='ContainerBrowserTest.*'
 ```
 
-On macOS, use Helium's required Xcode 26 toolchain. The tests cover storage
+For macOS toolchain and build flags, see `docs/macos-development-build.md`.
+The tests cover storage
 separation, same-container sharing, BroadcastChannel separation, cross-site
 navigation, link and popup inheritance, duplicate and closed-tab restore,
 hibernation, profile restart, editing validation and deleted-identity handling.
+The suite also checks site- and time-filtered cookie removal for containers
+without open tabs, plus partition-specific removal that must preserve the other
+containers and the ordinary profile partition.
 
 Before release, also check the native UI in both horizontal and vertical layouts:
 

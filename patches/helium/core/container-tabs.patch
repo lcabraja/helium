@@ -283,7 +283,7 @@
      std::move(deferred_disable_passwords_auto_signin_cb_).Run();
 --- /dev/null
 +++ b/chrome/browser/containers/BUILD.gn
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,47 @@
 +# Copyright 2026 The Helium Authors
 +# Use of this source code is governed by a GPL-3.0 license that can be
 +# found in the LICENSE file.
@@ -327,18 +327,26 @@
 +    "//components/prefs",
 +    "//content/test:test_support",
 +    "//net:test_support",
++    "//services/network/public/mojom",
 +    "//testing/gtest",
 +  ]
 +}
 --- /dev/null
 +++ b/chrome/browser/containers/container_browsertest.cc
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,435 @@
 +// Copyright 2026 The Helium Authors
 +// Use of this source code is governed by a GPL-3.0 license that can be
 +// found in the LICENSE file.
 +
++#include <memory>
++#include <set>
++#include <string>
++#include <vector>
++
 +#include "base/functional/bind.h"
++#include "base/test/run_until.h"
 +#include "base/test/test_future.h"
++#include "base/time/time.h"
 +#include "chrome/browser/containers/container_service.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
@@ -350,6 +358,8 @@
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
 +#include "components/prefs/pref_service.h"
++#include "content/public/browser/browsing_data_filter_builder.h"
++#include "content/public/browser/browsing_data_remover.h"
 +#include "content/public/browser/navigation_controller.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/site_instance.h"
@@ -357,11 +367,14 @@
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/test/browser_test.h"
 +#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/browsing_data_remover_test_util.h"
 +#include "content/public/test/test_navigation_observer.h"
++#include "net/cookies/canonical_cookie.h"
 +#include "net/dns/mock_host_resolver.h"
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_request.h"
 +#include "net/test/embedded_test_server/http_response.h"
++#include "services/network/public/mojom/cookie_manager.mojom.h"
 +
 +namespace helium::containers {
 +
@@ -400,6 +413,57 @@
 +    return GetContainers(browser()->GetProfile())[0].id;
 +  }
 +  std::string Work() { return GetContainers(browser()->GetProfile())[1].id; }
++
++  content::StoragePartition* Partition(const std::string& id) {
++    auto* profile = browser()->GetProfile();
++    return id.empty() ? profile->GetDefaultStoragePartition()
++                      : profile->GetStoragePartition(
++                            GetPartitionConfig(profile, id));
++  }
++
++  bool SeedCookie(const std::string& id,
++                  const GURL& url,
++                  const std::string& name,
++                  base::Time creation) {
++    auto cookie = net::CanonicalCookie::CreateForTesting(
++        url, name + "=yes; max-age=86400; path=/", creation,
++        net::CookieSourceType::kOther);
++    if (!cookie) {
++      return false;
++    }
++    base::test::TestFuture<net::CookieAccessResult> result;
++    Partition(id)->GetCookieManagerForBrowserProcess()->SetCanonicalCookie(
++        *cookie, url, net::CookieOptions::MakeAllInclusive(), result.GetCallback());
++    return result.Get().status.IsInclude();
++  }
++
++  std::set<std::string> CookieKeys(const std::string& id) {
++    base::test::TestFuture<std::vector<net::CanonicalCookie>> result;
++    Partition(id)->GetCookieManagerForBrowserProcess()->GetAllCookies(
++        result.GetCallback<const std::vector<net::CanonicalCookie>&>());
++    std::set<std::string> keys;
++    for (const auto& cookie : result.Get()) {
++      keys.insert(cookie.Domain() + "/" + cookie.Name());
++    }
++    return keys;
++  }
++
++  bool ClearCookies(
++      base::Time begin,
++      std::unique_ptr<content::BrowsingDataFilterBuilder> filter) {
++    auto* remover = browser()->GetProfile()->GetBrowsingDataRemover();
++    content::BrowsingDataRemoverCompletionObserver completion(remover);
++    remover->RemoveWithFilterAndReply(
++        begin, base::Time::Max(), content::BrowsingDataRemover::DATA_TYPE_COOKIES,
++        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
++        std::move(filter), &completion);
++    completion.BlockUntilCompletion();
++    // The embedder queues one removal per container. The observer above belongs
++    // to the original request; wait for the queued partitions as well.
++    return completion.failed_data_types() == 0 && base::test::RunUntil([&] {
++      return remover->GetPendingTaskCountForTesting() == 0;
++    });
++  }
 +};
 +
 +IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, DefaultsAndValidatedEdits) {
@@ -633,6 +697,49 @@
 +  OpenInContainer(browser(), {}, Work());
 +  EXPECT_EQ(count, browser()->tab_strip_model()->count());
 +  EXPECT_EQ(Work(), GetContainerId(work));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       FilteredCookieRemovalIncludesClosedContainers) {
++  const auto now = base::Time::Now();
++  const auto a = embedded_test_server()->GetURL("a.test", "/");
++  const auto b = embedded_test_server()->GetURL("b.test", "/");
++  const std::vector<std::string> identities = {Work(), Personal(), ""};
++  // Seed partitions without opening tabs, as when clearing saved containers
++  // before any of their tabs have been restored in the current session.
++  for (const auto& id : identities) {
++    for (const auto& url : {a, b}) {
++      ASSERT_TRUE(SeedCookie(id, url, "old", now - base::Hours(2)));
++      ASSERT_TRUE(SeedCookie(id, url, "recent", now));
++    }
++  }
++  auto filter = content::BrowsingDataFilterBuilder::Create(
++      content::BrowsingDataFilterBuilder::Mode::kDelete);
++  filter->AddRegisterableDomain("a.test");
++  ASSERT_TRUE(ClearCookies(now - base::Hours(1), std::move(filter)));
++  const std::set<std::string> expected = {
++      "a.test/old", "b.test/old", "b.test/recent"};
++  for (const auto& id : identities) {
++    EXPECT_EQ(expected, CookieKeys(id));
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       PartitionSpecificRemovalPreservesOtherContainers) {
++  const auto url = embedded_test_server()->GetURL("a.test", "/");
++  for (const auto& id : {Work(), Personal(), std::string()}) {
++    ASSERT_TRUE(SeedCookie(id, url, "account", base::Time::Now()));
++  }
++  auto filter = content::BrowsingDataFilterBuilder::Create(
++      content::BrowsingDataFilterBuilder::Mode::kDelete);
++  filter->AddRegisterableDomain("a.test");
++  filter->SetStoragePartitionConfig(
++      GetPartitionConfig(browser()->GetProfile(), Work()));
++  ASSERT_TRUE(ClearCookies(base::Time(), std::move(filter)));
++  EXPECT_TRUE(CookieKeys(Work()).empty());
++  const std::set<std::string> expected = {"a.test/account"};
++  EXPECT_EQ(expected, CookieKeys(Personal()));
++  EXPECT_EQ(expected, CookieKeys(""));
 +}
 +
 +IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, PRE_PersistentIdentityAndStorage) {
