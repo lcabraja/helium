@@ -148,3 +148,33 @@ earlier Chromium 153 compilation results above are historical. Mitsuha still
 has Xcode 16.1, so a complete Chromium 154 build and runtime tests remain required
 on a Mac with the supported Xcode toolchain. See `docs/macos-development-build.md`
 for the build and delivery requirements.
+
+## Runtime validation on 29 September 2026
+
+Rebased onto upstream `0dbe337` with macOS platform `24af304`, Chromium
+`154.0.8037.57`, Xcode 27.0 and the macOS 27.0 SDK on Katal. The development
+app, chromedriver and focused regression executable build successfully.
+
+All 15 container cases and the PRE restart setup pass, for 16 executions. The
+26 selected bookmark, history-list and appearance runners pass, as do the seven
+new-tab, wallpaper, extension-sidebar, history-routing and personalization
+runners. One upstream history test remains disabled and is not counted as a pass.
+The 376 common, platform and supplemental patches replay with no fuzz. Exact
+repository lint and the focused target's header dependency check pass.
+
+Runtime testing found and fixed initial blank pages losing their container's
+storage partition. Tests now check valid and invalid identities both before and
+after the first navigation. The hibernation fixture controls browser focus and
+waits for the resume navigation before checking storage.
+
+Native checks verified container creation and editing, separate cookies/local
+storage/IndexedDB/Cache Storage/service workers, rename and restart persistence,
+target-blank inheritance, the macOS shortcut, nested management sheets, pinned
+and grouped reopening, and cancellation of deletion when a page has unsaved
+changes. Horizontal and vertical tab layouts were exercised. Multi-selection
+reopening and edits across two windows were not checked in this run.
+
+This is a development build. The full upstream `browser_tests` target still
+fails to link fixtures for services removed by Helium, so the result is not full
+Chromium test coverage. Runtime checks used macOS 27.0; macOS 15.5 remains
+untested despite the audited deployment targets and bundle library paths.
