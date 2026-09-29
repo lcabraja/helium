@@ -1297,6 +1297,12 @@
     "message": "Show loading progress in the address bar"
   },
   {
+    "name": "IDS_CUSTOMIZE_SHOW_PROFILE_PICKER",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Toggle for showing the profile menu button in the toolbar.",
+    "message": "Show profile picker"
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",
