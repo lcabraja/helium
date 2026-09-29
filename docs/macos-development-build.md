@@ -3,7 +3,7 @@
 Use the current fork's `main` together with the matching
 [`imputnet/helium-macos`](https://github.com/imputnet/helium-macos) platform tools.
 The September 2026 rebase uses Chromium `154.0.8037.57` and was checked against
-platform commit `c464a10`. Follow that repository's build instructions, including
+platform commit `24af304`. Follow that repository's build instructions, including
 Xcode 26 or newer, its Metal toolchain, and pinned compiler/dependency downloads.
 Record both Git revisions in the build report.
 
@@ -88,3 +88,16 @@ required. No app compilation, browser tests, UI checks, signing or app delivery
 has completed. The proposed non-component arm64 build targets macOS 15.0 so
 that it can run on Mitsuha's macOS 15.5; that target still needs validation in
 the built binaries.
+
+## Katal rebase on 29 September 2026
+
+The container-tab commits are rebased onto upstream `0dbe337`, retaining
+Chromium `154.0.8037.57`. The macOS platform is updated to `24af304`, including
+its window-resize fix. The common, macOS and additional WebUI test patches all
+apply to pristine pinned source files without fuzz, 369 patches in total.
+The fork's configuration validation and whitespace checks pass.
+
+Xcode 27.0, build `27A266a`, and its Metal toolchain are installed on Katal.
+The build uses the macOS 27.0 SDK with a macOS 15.0 deployment target and a
+non-component arm64 configuration. A complete build and runtime validation
+are still required; successful patch application does not establish either.
