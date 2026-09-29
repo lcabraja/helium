@@ -1,0 +1,903 @@
+--- a/chrome/browser/enterprise/reporting/test/test_utils.cc
++++ b/chrome/browser/enterprise/reporting/test/test_utils.cc
+@@ -13,6 +13,7 @@
+ #include "components/enterprise/browser/reporting/report_util.h"
+ #include "components/policy/core/common/cloud/cloud_policy_util.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+
+ namespace enterprise_reporting {
+@@ -37,17 +38,21 @@
+   EXPECT_EQ(profile_signals_report.chrome_remote_desktop_app_blocked(),
+             device_signals::GetChromeRemoteDesktopAppBlocked(
+                 ChromePolicyBlocklistServiceFactory::GetForProfile(profile)));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_EQ(profile_signals_report.password_protection_warning_trigger(),
+             TranslatePasswordProtectionTrigger(
+                 device_signals::GetPasswordProtectionWarningTrigger(
+                     profile->GetPrefs())));
++#endif
+   CheckReportMatchSignal(
+       profile_signals_report.profile_enrollment_domain(),
+       device_signals::TryGetEnrollmentDomain(profile->GetCloudPolicyManager()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_EQ(
+       profile_signals_report.safe_browsing_protection_level(),
+       TranslateSafeBrowsingLevel(
+           device_signals::GetSafeBrowsingProtectionLevel(profile->GetPrefs())));
++#endif
+   EXPECT_EQ(profile_signals_report.site_isolation_enabled(),
+             device_signals::GetSiteIsolationEnabled());
+ }
+--- a/chrome/browser/media/router/test/mock_dns_sd_registry.cc
++++ b/chrome/browser/media/router/test/mock_dns_sd_registry.cc
+@@ -7,7 +7,7 @@
+ namespace media_router {
+
+ MockDnsSdRegistry::MockDnsSdRegistry(DnsSdRegistry::DnsSdObserver* observer)
+-    : DnsSdRegistry(nullptr), observer_(observer) {}
++    : DnsSdRegistry(), observer_(observer) {}
+
+ MockDnsSdRegistry::~MockDnsSdRegistry() = default;
+
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -69,7 +69,6 @@
+ #include "components/privacy_sandbox/privacy_sandbox_settings.h"
+ #include "components/privacy_sandbox/privacy_sandbox_test_util.h"
+ #include "components/safe_browsing/core/common/features.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/user_prefs/user_prefs.h"
+ #include "content/public/browser/network_service_instance.h"
+ #include "content/public/browser/storage_partition.h"
+--- a/chrome/browser/policy/test/quic_allowed_browsertest.cc
++++ b/chrome/browser/policy/test/quic_allowed_browsertest.cc
+@@ -57,10 +57,13 @@
+       g_browser_process->system_network_context_manager()->GetContext());
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ bool IsQuicEnabledForSafeBrowsing(Profile* profile) {
+   return IsQuicEnabled(
+       g_browser_process->safe_browsing_service()->GetNetworkContext(profile));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+
+ }  // namespace
+
+@@ -172,6 +175,7 @@
+   }
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse,
+                        QuicDisallowedForSafeBrowsing) {
+   EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
+@@ -186,6 +190,8 @@
+     EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
+   }
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForProfile) {
+   EXPECT_FALSE(IsQuicEnabled(browser()->GetProfile()));
+@@ -243,6 +249,7 @@
+   }
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSafeBrowsing) {
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
+
+@@ -256,6 +263,8 @@
+     EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
+   }
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+ // TODO(crbug.com/40777997): Flaky on multiple platforms
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue,
+@@ -290,7 +299,9 @@
+
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsNotSet, NoQuicRegulations) {
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_TRUE(IsQuicEnabled(browser()->GetProfile()));
+ }
+
+@@ -423,7 +434,9 @@
+   // After browser start, QuicAllowed=false comes in dynamically
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+
+   // Set the QuicAllowed policy to true again
+@@ -431,7 +444,9 @@
+   // Effectively, QUIC is still disabled because QUIC re-enabling is not
+   // supported.
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+
+   // Completely remove the QuicAllowed policy
+@@ -439,13 +454,17 @@
+   // Effectively, QUIC is still disabled because QUIC re-enabling is not
+   // supported.
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+
+   // QuicAllowed=false is set again
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ }
+
+@@ -455,25 +474,33 @@
+   // After browser start, QuicAllowed=true comes in dynamically
+   SetQuicAllowedPolicy(policy_for_profile_1(), true);
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+
+   // Completely remove the QuicAllowed policy
+   RemoveAllPolicies(policy_for_profile_1());
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+
+   // Set the QuicAllowed policy to true again
+   SetQuicAllowedPolicy(policy_for_profile_1(), true);
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+
+   // Now set QuicAllowed=false
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ }
+
+@@ -488,14 +515,18 @@
+
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+
+   CreateSecondProfile();
+
+   // QUIC is disabled in both profiles
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+ }
+@@ -515,21 +546,27 @@
+
+   // QUIC is enabled in both profiles
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+   EXPECT_TRUE(IsQuicEnabled(profile_2()));
+
+   // Disable QUIC in first profile
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+
+   // Disable QUIC in second profile
+   SetQuicAllowedPolicy(policy_for_profile_2(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->GetProfile()));
++#endif
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+ }
+--- a/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
++++ b/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
+@@ -57,7 +57,10 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/privacy_sandbox/privacy_sandbox_features.h"
+ #include "components/safe_browsing/core/common/features.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#endif
+ #include "components/ukm/test_ukm_recorder.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -1714,6 +1717,7 @@
+   RunServiceWorkerInterceptTest(expect_two_hosts);
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class NoStatePrefetchBrowserTestWithEsbBlockV8
+     : public NoStatePrefetchBrowserTest {
+  public:
+@@ -1744,6 +1748,8 @@
+                        MAYBE_ServiceWorkerInterceptWithEsb) {
+   RunServiceWorkerInterceptTest(true);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+
+ // Checks that when the history is cleared, NoStatePrefetch history is cleared.
+ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ClearHistory) {
+--- a/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc
++++ b/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc
+@@ -891,7 +891,7 @@
+           ->GetDefaultSearchProvider()
+           ->data()
+           .prepopulate_id,
+-      TemplateURLPrepopulateData::google.id);
++      TemplateURLPrepopulateData::break_stuff_google.id);
+
+   // The choice was not persisted across Guest sessions, so the
+   // the search engine choice dialog gets displayed again.
+@@ -1069,8 +1069,8 @@
+   // displayed list.
+   int prepopulate_id = service->GetSearchEngines().at(0)->prepopulate_id();
+   if (select_google_in_pre()) {
+-    prepopulate_id = TemplateURLPrepopulateData::google.id;
+-  } else if (prepopulate_id == TemplateURLPrepopulateData::google.id) {
++    prepopulate_id = TemplateURLPrepopulateData::break_stuff_google.id;
++  } else if (prepopulate_id == TemplateURLPrepopulateData::break_stuff_google.id) {
+     // The first item was Google, pick the second then.
+     prepopulate_id = service->GetSearchEngines().at(1)->prepopulate_id();
+   }
+--- a/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc
++++ b/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc
+@@ -38,7 +38,7 @@
+ namespace {
+
+ using ::TemplateURLPrepopulateData::bing;
+-using ::TemplateURLPrepopulateData::google;
++constexpr auto& google = ::TemplateURLPrepopulateData::break_stuff_google;
+ using ::TemplateURLPrepopulateData::PrepopulatedEngine;
+ using ::testing::ElementsAreArray;
+ using TemplateURLVector = ::TemplateURL::TemplateURLVector;
+@@ -186,7 +186,7 @@
+   }
+   if (summary.search_url.has_value()) {
+     os << ", search_url: "
+-       << (summary.search_url == TemplateURLPrepopulateData::google.search_url
++       << (summary.search_url == TemplateURLPrepopulateData::break_stuff_google.search_url
+                ?
+                // Because that URL is super long and spams the error logs!
+                "<google search url>"
+@@ -454,7 +454,7 @@
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+
+   SetDeviceChoice(android_keyword, android_codesearch.name,
+-                  android_codesearch.search_url);
++                  android_codesearch.search_url, /*suggestions_url=*/std::string());
+
+   std::vector<SearchProviderSummary> expectations = {
+       {google.id, google.keyword, false},
+@@ -524,7 +524,7 @@
+
+   template_url_service().ResetTemplateURL(migrating_t_url, u"Searchy Search",
+                                           custom_keyword,
+-                                          android_codesearch.search_url);
++                                          android_codesearch.search_url, /*suggestions_url=*/std::string());
+
+   std::vector<SearchProviderSummary> expectations = {
+       {google.id, google.keyword, true},
+@@ -670,7 +670,7 @@
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+
+   SetDeviceChoice(android_keyword, android_codesearch.name,
+-                  android_codesearch.search_url);
++                  android_codesearch.search_url, /*suggestions_url=*/std::string());
+
+   std::vector<SearchProviderSummary> expectations = {
+       {google.id, google.keyword, false},
+@@ -1051,14 +1051,14 @@
+
+   template_url_service().ResetTemplateURL(
+       template_url_service().GetTemplateURLForKeyword(android_keyword),
+-      android_codesearch.name, custom_keyword, android_codesearch.search_url);
++      android_codesearch.name, custom_keyword, android_codesearch.search_url, /*suggestions_url=*/std::string());
+
+   template_url_service().SetUserSelectedDefaultSearchProvider(
+       template_url_service().GetTemplateURLForKeyword(custom_keyword));
+
+   template_url_service().ResetTemplateURL(
+       template_url_service().GetTemplateURLForKeyword(custom_keyword),
+-      u"Searchy Search", custom_keyword, android_codesearch.search_url);
++      u"Searchy Search", custom_keyword, android_codesearch.search_url, /*suggestions_url=*/std::string());
+
+   std::vector<SearchProviderSummary> expectations = {
+       {google.id, google.keyword, false},
+--- a/chrome/browser/search_engines/template_url_service_test_util.cc
++++ b/chrome/browser/search_engines/template_url_service_test_util.cc
+@@ -38,6 +38,7 @@
+ #include "components/search_engines/search_engines_test_util.h"
+ #include "components/search_engines/template_url_data_util.h"
+ #include "components/search_engines/template_url_service.h"
++#include "components/search_engines/template_url_service_test_util.h"
+ #include "components/search_engines/testing_search_terms_data.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "components/webdata/common/web_database_service.h"
+@@ -252,6 +253,7 @@
+     base::RepeatingClosure dsp_change_callback) {
+   return std::make_unique<TemplateURLService>(
+       CHECK_DEREF(profile->GetPrefs()),
++      CreateSearchEngineTestURLLoaderFactory(),
+       CHECK_DEREF(
+           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
+               profile)),
+@@ -271,6 +273,7 @@
+     base::span<const TemplateURLService::Initializer> initializers) {
+   return std::make_unique<TemplateURLService>(
+       CHECK_DEREF(profile->GetPrefs()),
++      CreateSearchEngineTestURLLoaderFactory(),
+       CHECK_DEREF(
+           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
+               profile)),
+--- a/chrome/browser/ssl/ssl_browsertest.cc
++++ b/chrome/browser/ssl/ssl_browsertest.cc
+@@ -7122,6 +7122,7 @@
+   EXPECT_EQ(std::nullopt, timer);
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class SSLUITestWithEnhancedProtectionMessage : public SSLUITest {
+  public:
+   SSLUITestWithEnhancedProtectionMessage() = default;
+@@ -7195,6 +7196,8 @@
+   ExpectInterstitialElementHidden(contents, "enhanced-protection-message",
+                                   true /* expect_hidden */);
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+ class InsecureFormNavigationThrottleFencedFrameBrowserTest
+     : public InProcessBrowserTest {
+--- a/chrome/browser/sync/test/integration/search_engines_helper.cc
++++ b/chrome/browser/sync/test/integration/search_engines_helper.cc
+@@ -172,7 +172,7 @@
+   EXPECT_TRUE(turl);
+   ASSERT_FALSE(new_keyword.empty());
+   service->ResetTemplateURL(turl, short_name, base::UTF8ToUTF16(new_keyword),
+-                            url);
++                            url, turl->suggestions_url());
+ }
+
+ void DeleteSearchEngine(int profile_index, const std::string& keyword) {
+--- a/chrome/browser/sync/test/integration/sync_app_helper.cc
++++ b/chrome/browser/sync/test/integration/sync_app_helper.cc
+@@ -106,7 +106,7 @@
+     }
+   }
+
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+
+   std::list<std::string> pending_crx_ids =
+--- a/chrome/browser/sync/test/integration/sync_extension_helper.cc
++++ b/chrome/browser/sync/test/integration/sync_extension_helper.cc
+@@ -163,7 +163,7 @@
+
+   // We make a copy here since InstallExtension() removes the
+   // extension from the extensions service's copy.
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+
+   std::list<std::string> pending_crx_ids =
+@@ -229,7 +229,7 @@
+                                                              : "disabled");
+   }
+
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+
+   std::list<std::string> pending_crx_ids =
+--- a/chrome/browser/ui/views/file_system_access/file_system_access_browsertest.cc
++++ b/chrome/browser/ui/views/file_system_access/file_system_access_browsertest.cc
+@@ -15,13 +15,12 @@
+ #include "base/test/test_file_util.h"
+ #include "base/test/test_future.h"
+ #include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
+-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -43,7 +42,11 @@
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/permissions/permission_util.h"
+ #include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
++#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
++#endif
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/file_system_access_permission_context.h"
+ #include "content/public/common/content_switches.h"
+@@ -61,7 +64,9 @@
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "ui/webui/webui_allowlist.h"
+
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ using safe_browsing::ClientDownloadRequest;
++#endif
+
+ // End-to-end tests for the File System Access API. Among other things, these
+ // test the integration between usage of the File System Access API and the
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_link_drag_browsertest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_link_drag_browsertest.cc
+@@ -471,16 +471,7 @@
+       views::AsViewClass<VerticalTabStripRegionView>(region_view());
+   ASSERT_TRUE(v_region_view);
+
+-  {
+-    auto* top_container = v_region_view->GetTopContainer();
+-    const gfx::Point loc_in_top(top_container->width() / 2,
+-                                top_container->height() / 2);
+-    const gfx::Point loc_in_region = views::View::ConvertPointToTarget(
+-        top_container, region_view(), loc_in_top);
+-    EXPECT_EQ(region_view()->GetDropTarget(loc_in_region), region_view());
+-    EXPECT_EQ(GetDropIndexAt(top_container, loc_in_top)->index, 0);
+-  }
+-
++  // Helium has no separate top container in its vertical tab strip.
+   {
+     auto* bottom_container = v_region_view->GetBottomContainer();
+     const gfx::Point loc_in_bottom(bottom_container->width() / 2,
+--- a/chrome/browser/webshare/share_service_browsertest.cc
++++ b/chrome/browser/webshare/share_service_browsertest.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/webshare/share_service_impl.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
+ #include "components/safe_browsing/core/browser/db/fake_database_manager.h"
+ #include "components/safe_browsing/core/browser/db/v5_get_hash_protocol_manager.h"
+@@ -187,6 +188,7 @@
+
+ }  // namespace
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class SafeBrowsingShareServiceBrowserTest : public ShareServiceBrowserTest {
+  public:
+   SafeBrowsingShareServiceBrowserTest()
+@@ -268,6 +270,8 @@
+                                      1);
+ }
+
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ class ShareServicePrerenderBrowserTest : public ShareServiceBrowserTest {
+  public:
+   ShareServicePrerenderBrowserTest()
+--- a/chrome/test/base/testing_browser_process.cc
++++ b/chrome/test/base/testing_browser_process.cc
+@@ -30,7 +30,9 @@
+ #include "chrome/browser/printing/print_job_manager.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/safe_browsing_service.h"
++#endif
+ #include "chrome/browser/serial/serial_policy_allowed_ports.h"
+ #include "chrome/browser/status_icons/status_tray.h"
+ #include "chrome/common/chrome_paths.h"
+@@ -476,10 +478,12 @@
+   return status_tray_.get();
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ safe_browsing::SafeBrowsingService*
+ TestingBrowserProcess::safe_browsing_service() {
+   return sb_service_.get();
+ }
++#endif
+
+ WebRtcLogUploader* TestingBrowserProcess::webrtc_log_uploader() {
+   return webrtc_log_uploader_.get();
+@@ -794,10 +798,12 @@
+   return platform_part_.get();
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ void TestingBrowserProcess::SetSafeBrowsingService(
+     safe_browsing::SafeBrowsingService* sb_service) {
+   sb_service_ = sb_service;
+ }
++#endif
+
+ void TestingBrowserProcess::SetWebRtcLogUploader(
+     std::unique_ptr<WebRtcLogUploader> uploader) {
+--- a/chrome/test/base/testing_browser_process.h
++++ b/chrome/test/base/testing_browser_process.h
+@@ -147,7 +147,9 @@
+       std::unique_ptr<BackgroundModeManager> manager) override;
+ #endif
+   StatusTray* status_tray() override;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::SafeBrowsingService* safe_browsing_service() override;
++#endif
+   subresource_filter::RulesetService* subresource_filter_ruleset_service()
+       override;
+   BrowserProcessPlatformPart* platform_part() override;
+@@ -205,7 +207,7 @@
+   void set_usb_system_tray_icon_for_test(
+       std::unique_ptr<UsbSystemTrayIcon> icon) override;
+   speech::SpeechRecognitionSmallExpertModelInstaller*
+-  speech_recognition_small_expert_model_installer() override;
++  speech_recognition_small_expert_model_installer();
+ #endif
+   os_crypt_async::OSCryptAsync* os_crypt_async() override;
+   void set_additional_os_crypt_async_provider_for_test(
+@@ -220,7 +222,9 @@
+
+   void SetMetricsService(metrics::MetricsService* metrics_service);
+   void SetProfileManager(std::unique_ptr<ProfileManager> profile_manager);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetSafeBrowsingService(safe_browsing::SafeBrowsingService* sb_service);
++#endif
+   void SetVariationsService(variations::VariationsService* variations_service);
+   void SetWebRtcLogUploader(std::unique_ptr<WebRtcLogUploader> uploader);
+   void SetRulesetService(
+@@ -338,7 +342,9 @@
+       device_parental_controls_;
+ #endif
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   scoped_refptr<safe_browsing::SafeBrowsingService> sb_service_;
++#endif
+   std::unique_ptr<subresource_filter::RulesetService>
+       subresource_filter_ruleset_service_;
+   std::unique_ptr<WebRtcLogUploader> webrtc_log_uploader_;
+--- a/components/omnibox/browser/test_location_bar_model.cc
++++ b/components/omnibox/browser/test_location_bar_model.cc
+@@ -34,6 +34,12 @@
+     return base::UTF8ToUTF16(url_.spec());
+
+   return *url_for_display_;
++}
++
++std::u16string TestLocationBarModel::GetURLForDisplay(
++    bool trim_after_host_name) const {
++  // This model supplies the display string configured by the test.
++  return GetURLForDisplay();
+ }
+
+ GURL TestLocationBarModel::GetURL() const {
+--- a/components/omnibox/browser/test_location_bar_model.h
++++ b/components/omnibox/browser/test_location_bar_model.h
+@@ -28,6 +28,7 @@
+   TestLocationBarModel& operator=(const TestLocationBarModel&) = delete;
+   std::u16string GetFormattedFullURL() const override;
+   std::u16string GetURLForDisplay() const override;
++  std::u16string GetURLForDisplay(bool trim_after_host_name) const override;
+   GURL GetURL() const override;
+   bool IsContextualTasksPage() const override;
+   GURL GetContextualTasksInnerFrameURL() const override;
+--- a/components/search_engines/BUILD.gn
++++ b/components/search_engines/BUILD.gn
+@@ -212,6 +212,7 @@
+     "//base",
+     "//base/test:test_support",
+     "//components/country_codes",
++    "//components/helium_services",
+     "//components/metrics",
+     "//components/metrics:metrics_pref_names",
+     "//components/os_crypt/browser:test_support",
+@@ -221,6 +222,7 @@
+     "//components/regional_capabilities:test_support",
+     "//components/signin/public/identity_manager:test_support",
+     "//components/sync_preferences:test_support",
++    "//services/network/public/cpp",
+     "//testing/gtest",
+     "//third_party/search_engines_data:regional_settings",
+   ]
+--- a/components/search_engines/search_engines_test_environment.cc
++++ b/components/search_engines/search_engines_test_environment.cc
+@@ -40,6 +40,7 @@
+       [deps](SearchEnginesTestEnvironment& environment) {
+         return std::make_unique<TemplateURLService>(
+             environment.pref_service(),
++            CreateSearchEngineTestURLLoaderFactory(),
+             environment.search_engine_choice_service(),
+             environment.prepopulate_data_resolver(),
+             environment.regional_capabilities_service(),
+--- a/components/search_engines/template_url_service_test_util.cc
++++ b/components/search_engines/template_url_service_test_util.cc
+@@ -9,6 +9,7 @@
+ #include "base/check_deref.h"
+ #include "base/command_line.h"
+ #include "components/country_codes/country_codes.h"
++#include "components/helium_services/pref_names.h"
+ #include "components/metrics/metrics_pref_names.h"
+ #include "components/metrics/profile_metrics_service.h"
+ #include "components/os_crypt/async/browser/test_utils.h"
+@@ -27,14 +28,26 @@
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/template_url_service_client.h"
+ #include "components/webdata/common/web_database_service.h"
++#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+
+ void RegisterPrefsForTemplateURLService(
+     user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(prefs::kHeliumServicesOrigin, "");
++  registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, false);
++  registry->RegisterBooleanPref(prefs::kHeliumServicesConsented, false);
++  registry->RegisterBooleanPref(prefs::kHeliumBangsEnabled, false);
+   TemplateURLService::RegisterProfilePrefs(registry);
+   TemplateURLPrepopulateData::RegisterProfilePrefs(registry);
+   regional_capabilities::prefs::RegisterProfilePrefs(registry);
+   DefaultSearchManager::RegisterProfilePrefs(registry);
+   search_engines::SearchEngineChoiceService::RegisterProfilePrefs(registry);
++}
++
++scoped_refptr<network::SharedURLLoaderFactory>
++CreateSearchEngineTestURLLoaderFactory() {
++  // A disconnected factory cancels bang requests without using the network.
++  return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
++      static_cast<network::mojom::URLLoaderFactory*>(nullptr));
+ }
+
+ // -- TemplateURLServiceLoadWaiter --------------------------------------------
+@@ -117,7 +130,8 @@
+ std::unique_ptr<TemplateURLService>
+ TemplateURLServiceUnitTestBase::CreateService() {
+   return std::make_unique<TemplateURLService>(
+-      pref_service_, *search_engine_choice_service_,
++      pref_service_, CreateSearchEngineTestURLLoaderFactory(),
++      *search_engine_choice_service_,
+       *prepopulate_data_resolver_.get(), *regional_capabilities_service_,
+       *profile_metrics_service_, std::make_unique<SearchTermsData>(),
+       nullptr /* KeywordWebDataService */,
+@@ -149,7 +163,8 @@
+   }
+
+   auto template_url_service = std::make_unique<TemplateURLService>(
+-      pref_service(), search_engine_choice_service(),
++      pref_service(), CreateSearchEngineTestURLLoaderFactory(),
++      search_engine_choice_service(),
+       prepopulate_data_resolver(), regional_capabilities_service(),
+       profile_metrics_service(), std::make_unique<SearchTermsData>(),
+       keyword_data_service_, nullptr /* TemplateURLServiceClient */,
+--- a/components/search_engines/template_url_service_test_util.h
++++ b/components/search_engines/template_url_service_test_util.h
+@@ -13,6 +13,7 @@
+ #include "components/search_engines/template_url_service_observer.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+
+ class KeywordWebDataService;
+@@ -36,6 +37,10 @@
+
+ void RegisterPrefsForTemplateURLService(
+     user_prefs::PrefRegistrySyncable* registry);
++
++// Creates a disconnected factory for search fixtures without network access.
++scoped_refptr<network::SharedURLLoaderFactory>
++CreateSearchEngineTestURLLoaderFactory();
+
+ // One-shot observer that blocks until `template_url_service` is done loading.
+ class TemplateURLServiceLoadWaiter : public TemplateURLServiceObserver {
+--- a/content/browser/renderer_host/navigation_controller_impl_unittest.cc
++++ b/content/browser/renderer_host/navigation_controller_impl_unittest.cc
+@@ -165,6 +165,11 @@
+               (bool supports_draggable_regions),
+               (override));
+
++  MOCK_METHOD(void,
++              UpdateHeliumNoiseTokens,
++              (const blink::HeliumNoiseTokenMap& tokens),
++              (override));
++
+   MOCK_METHOD(void, UpgradePrerenderUntilScriptToFullPrerender, (), (override));
+
+   mojo::PendingAssociatedRemote<blink::mojom::PageBroadcast> GetRemote() {
+--- a/content/test/test_page_broadcast.cc
++++ b/content/test/test_page_broadcast.cc
+@@ -71,4 +71,7 @@
+ void TestPageBroadcast::SetSupportsDraggableRegions(
+     bool supports_draggable_regions) {}
+
++void TestPageBroadcast::UpdateHeliumNoiseTokens(
++    const blink::HeliumNoiseTokenMap& tokens) {}
++
+ }  // namespace content
+--- a/content/test/test_page_broadcast.h
++++ b/content/test/test_page_broadcast.h
+@@ -51,6 +51,7 @@
+   void UpdateColorProviders(
+       const blink::ColorProviderColorMaps& color_provider_colors) override;
+   void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
++  void UpdateHeliumNoiseTokens(const blink::HeliumNoiseTokenMap& tokens) override;
+
+   mojo::AssociatedReceiver<blink::mojom::PageBroadcast> receiver_;
+ };
+--- a/extensions/browser/test_blocklist_state_fetcher.cc
++++ b/extensions/browser/test_blocklist_state_fetcher.cc
+@@ -4,7 +4,6 @@
+
+ #include "extensions/browser/test_blocklist_state_fetcher.h"
+
+-#include "components/safe_browsing/core/browser/db/v4_test_util.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "services/network/public/cpp/shared_url_loader_factory.h"
+@@ -53,8 +52,6 @@
+ TestBlocklistStateFetcher::TestBlocklistStateFetcher(
+     BlocklistStateFetcher* fetcher)
+     : fetcher_(fetcher) {
+-  fetcher_->SetSafeBrowsingConfig(safe_browsing::GetTestV4ProtocolConfig());
+-
+   url_loader_factory_ = base::MakeRefCounted<DummySharedURLLoaderFactory>();
+   fetcher_->url_loader_factory_ = url_loader_factory_.get();
+ }
+--- a/third_party/blink/renderer/core/frame/frame_test_helpers.cc
++++ b/third_party/blink/renderer/core/frame/frame_test_helpers.cc
+@@ -791,7 +791,8 @@
+       /*page_base_background_color=*/std::nullopt, browsing_context_group_token,
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+-      /*history_length=*/0));
++      /*history_length=*/0,
++      /*noise_tokens=*/blink::HeliumNoiseTokenMap()));
+   // This property must be set at initialization time, it is not supported to be
+   // changed afterward, and does nothing.
+   web_view_->GetSettings()->SetViewportEnabled(viewport_enabled_);
+@@ -835,7 +836,8 @@
+       /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+-      /*history_length=*/0));
++      /*history_length=*/0,
++      /*noise_tokens=*/blink::HeliumNoiseTokenMap()));
+ }
+
+ int TestWebFrameClient::loads_in_progress_ = 0;
+--- a/third_party/blink/renderer/core/page/page_test.cc
++++ b/third_party/blink/renderer/core/page/page_test.cc
+@@ -23,7 +23,8 @@
+
+   Page* page =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, bcg_token,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr,
++                           /*noise_tokens=*/HeliumNoiseTokenMap());
+
+   EXPECT_EQ(page->BrowsingContextGroupToken(), bcg_token);
+ }
+@@ -47,7 +48,8 @@
+
+   Page* page = Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler,
+                                     initial_bcg_token,
+-                                    /*color_provider_colors=*/nullptr);
++                                    /*color_provider_colors=*/nullptr,
++                                    /*noise_tokens=*/HeliumNoiseTokenMap());
+
+   EXPECT_EQ(page->BrowsingContextGroupToken(), initial_bcg_token);
+
+@@ -70,7 +72,8 @@
+
+   Page* page1 =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, group_a,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr,
++                           /*noise_tokens=*/HeliumNoiseTokenMap());
+
+   auto pauser_for_group_a =
+       std::make_unique<ScopedBrowsingContextGroupPauser>(*page1);
+@@ -82,7 +85,8 @@
+
+   Page* page2 =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, group_b,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr,
++                           /*noise_tokens=*/HeliumNoiseTokenMap());
+   ASSERT_FALSE(page2->Paused());
+
+   page2->UpdateBrowsingContextGroup(group_a);
+@@ -100,7 +104,8 @@
+   auto color_provider_colors = ColorProviderColorMaps::CreateDefault();
+
+   Page* page = Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler,
+-                                    bcg_token, &color_provider_colors);
++                                    bcg_token, &color_provider_colors,
++                                    /*noise_tokens=*/HeliumNoiseTokenMap());
+
+   const ui::ColorProvider* light_color_provider =
+       page->GetColorProviderForPainting(
+--- a/third_party/blink/renderer/core/testing/dummy_page_holder.cc
++++ b/third_party/blink/renderer/core/testing/dummy_page_holder.cc
+@@ -103,7 +103,8 @@
+   page_ = Page::CreateOrdinary(*chrome_client, /*opener=*/nullptr,
+                                *agent_group_scheduler_,
+                                base::UnguessableToken::Create(),
+-                               /*color_provider_colors=*/nullptr);
++                               /*color_provider_colors=*/nullptr,
++                               /*noise_tokens=*/HeliumNoiseTokenMap());
+   Settings& settings = page_->GetSettings();
+   if (setting_overrider)
+     std::move(setting_overrider).Run(settings);
+--- a/third_party/blink/renderer/modules/peerconnection/webrtc_audio_renderer_test.cc
++++ b/third_party/blink/renderer/modules/peerconnection/webrtc_audio_renderer_test.cc
+@@ -252,7 +252,8 @@
+             /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+             /*color_provider_colors=*/nullptr,
+             /*history_index=*/-1,
+-            /*history_length=*/0)),
++            /*history_length=*/0,
++            /*noise_tokens=*/blink::HeliumNoiseTokenMap())),
+         web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
+             web_view_,
+             &web_local_frame_client_,
+--- a/third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl_test.cc
++++ b/third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl_test.cc
+@@ -220,7 +220,8 @@
+         /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+         /*color_provider_colors=*/nullptr,
+         /*history_index=*/-1,
+-        /*history_length=*/0);
++        /*history_length=*/0,
++        /*noise_tokens=*/blink::HeliumNoiseTokenMap());
+
+     web_local_frame_ = blink::WebLocalFrame::CreateMainFrame(
+         web_view_, &web_local_frame_client_, nullptr, mojo::NullRemote(),

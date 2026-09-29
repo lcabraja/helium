@@ -1,0 +1,8 @@
+--- a/chrome/browser/ui/cocoa/accelerators_cocoa.mm
++++ b/chrome/browser/ui/cocoa/accelerators_cocoa.mm
+@@ -45,4 +45,5 @@
+      ui::VKEY_N},
+     {IDC_NEW_TAB, ui::EF_COMMAND_DOWN, ui::VKEY_T},
++    {IDC_NEW_CONTAINER_TAB, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::VKEY_T},
+     {IDC_NEW_WINDOW, ui::EF_COMMAND_DOWN, ui::VKEY_N},
+     {IDC_PASTE, ui::EF_COMMAND_DOWN, ui::VKEY_V},

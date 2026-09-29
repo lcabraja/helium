@@ -1,0 +1,106 @@
+--- a/chrome/browser/ui/containers/container_ui.cc
++++ b/chrome/browser/ui/containers/container_ui.cc
+@@ -53,3 +53,6 @@
+-                std::unique_ptr<views::DialogDelegate> dialog) {
+-  const auto native_window = browser->GetWindow()->GetNativeWindow();
+-  auto* parent = views::Widget::GetWidgetForNativeWindow(native_window);
++                std::unique_ptr<views::DialogDelegate> dialog,
++                views::Widget* parent = nullptr) {
++  if (!parent) {
++    parent = views::Widget::GetWidgetForNativeWindow(
++        browser->GetWindow()->GetNativeWindow());
++  }
+@@ -60 +63 @@
+-  views::DialogDelegate::CreateDialogWidget(std::move(dialog), native_window,
++  views::DialogDelegate::CreateDialogWidget(std::move(dialog), parent->GetNativeWindow(),
+@@ -132 +135,2 @@
+-void ShowEditor(BrowserWindowInterface* browser, std::string id) {
++void ShowEditor(BrowserWindowInterface* browser, std::string id,
++                views::Widget* parent) {
+@@ -180,4 +184,5 @@
+-  ShowDialog(browser, std::move(dialog));
+-}
+-
+-void ConfirmRemoval(BrowserWindowInterface* browser, std::string id) {
++  ShowDialog(browser, std::move(dialog), parent);
++}
++
++void ConfirmRemoval(BrowserWindowInterface* browser, std::string id,
++                    views::Widget* parent) {
+@@ -217 +222 @@
+-  ShowDialog(browser, std::move(dialog));
++  ShowDialog(browser, std::move(dialog), parent);
+@@ -264,7 +269,2 @@
+-        base::BindRepeating(
+-            [](base::WeakPtr<BrowserWindowInterface> browser) {
+-              if (browser) {
+-                ShowEditor(browser.get(), {});
+-              }
+-            },
+-            browser_),
++        base::BindRepeating(&ContainerManager::Edit,
++                            weak_factory_.GetWeakPtr(), std::string()),
+@@ -279,0 +280,12 @@
++  void Edit(std::string id) {
++    if (browser_) {
++      ShowEditor(browser_.get(), std::move(id), GetWidget());
++    }
++  }
++
++  void ConfirmDelete(std::string id) {
++    if (browser_) {
++      ConfirmRemoval(browser_.get(), std::move(id), GetWidget());
++    }
++  }
++
+@@ -301,8 +313,2 @@
+-          base::BindRepeating(
+-              [](base::WeakPtr<BrowserWindowInterface> browser,
+-                 std::string id) {
+-                if (browser) {
+-                  ShowEditor(browser.get(), std::move(id));
+-                }
+-              },
+-              browser_, container.id),
++          base::BindRepeating(&ContainerManager::Edit,
++                              weak_factory_.GetWeakPtr(), container.id),
+@@ -311,8 +317,2 @@
+-          base::BindRepeating(
+-              [](base::WeakPtr<BrowserWindowInterface> browser,
+-                 std::string id) {
+-                if (browser) {
+-                  ConfirmRemoval(browser.get(), std::move(id));
+-                }
+-              },
+-              browser_, container.id),
++          base::BindRepeating(&ContainerManager::ConfirmDelete,
++                              weak_factory_.GetWeakPtr(), container.id),
+@@ -331,0 +332,10 @@
++
++void ShowManagerForParent(BrowserWindowInterface* browser,
++                          views::Widget* parent) {
++  if (browser && !browser->GetProfile()->IsOffTheRecord()) {
++    auto dialog = std::make_unique<views::DialogDelegate>();
++    dialog->SetContentsView(
++        std::make_unique<ContainerManager>(browser, dialog.get()));
++    ShowDialog(browser, std::move(dialog), parent);
++  }
++}
+@@ -533 +543,2 @@
+-          [](base::WeakPtr<BrowserWindowInterface> browser) {
++          [](base::WeakPtr<BrowserWindowInterface> browser,
++             views::DialogDelegate* picker) {
+@@ -535 +546 @@
+-              ShowContainerManager(browser.get());
++              ShowManagerForParent(browser.get(), picker->GetWidget());
+@@ -538 +549 @@
+-          browser->GetWeakPtr()),
++          browser->GetWeakPtr(), base::Unretained(dialog.get())),
+@@ -553,6 +564 @@
+-  if (browser && !browser->GetProfile()->IsOffTheRecord()) {
+-    auto dialog = std::make_unique<views::DialogDelegate>();
+-    dialog->SetContentsView(
+-        std::make_unique<ContainerManager>(browser, dialog.get()));
+-    ShowDialog(browser, std::move(dialog));
+-  }
++  ShowManagerForParent(browser, nullptr);

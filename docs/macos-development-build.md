@@ -37,7 +37,7 @@ or mix dependency versions to make configuration pass.
 3. For a source checkout containing Chromium's test data, apply
    `docs/container-tabs-webui-tests.patch`, followed by
    `docs/macos-development-webui-tests.patch` and
-   `docs/macos-development-noise-tests.patch`. Build `browser_tests` and run
+   `docs/macos-development-cpp-tests.patch`. Build `browser_tests` and run
    `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
    bookmark, history and settings WebUI checks.
    The small checkout also omits the non-Git test-font archive. Fetch the
@@ -154,8 +154,30 @@ The 37 modified container C++/Objective-C++ translation units and the WebUI test
 resources compile with the current Xcode toolchain. Runtime validation remains
 required.
 
-The full test build also needs `docs/macos-development-noise-tests.patch`.
+The full test build also needs `docs/macos-development-cpp-tests.patch`.
 It passes explicit empty noise-token maps when standalone Blink fixtures create
 pages and web views, and adds the noise-token update method to page-broadcast
 test doubles. These fixtures have no browser-provided noise tokens. Production
 callers still supply their tokens through the required constructor arguments.
+
+The same C++ test patch supplies disconnected URL-loader factories to search
+engine fixtures and registers their Helium service preferences. Bang requests
+cannot reach a live service from these fixtures. Production search-engine
+services retain their profile-provided network factory.
+
+The C++ compatibility patch also updates browser-process and omnibox test doubles,
+DNS-SD and extension helpers, search-edit arguments, and the retained Google
+engine symbol. Safe Browsing-specific assertions follow its disabled build flag,
+and vertical-tab tests cover Helium's remaining bottom container. These changes
+allow shared test support to compile without restoring removed product features.
+
+Native UI checks found two container issues: macOS needs its shortcut in the
+Cocoa accelerator table, and noopener windows must preserve a fixed storage
+partition when creating a new browsing instance. Both fixes are in the normal
+patch series. The popup regression test now checks storage identity, cookie
+sharing and a null opener for script-created windows and target-blank links.
+
+The manager, editor and deletion dialogs now use the initiating dialog as their
+parent. On macOS, attaching every dialog to the main window queued child sheets
+behind the manager, making Edit and Add appear unresponsive. The picker's
+Manage containers action also keeps the correct parent relationship.

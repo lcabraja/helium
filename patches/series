@@ -368,3 +368,6 @@ helium/ui/exclusive-access-bubble.patch
 helium/ui/hide-page-actions-flag.patch
 helium/ui/respect-managed-wallpaper.patch
 helium/core/container-tabs.patch
+helium/core/container-tabs-macos-shortcut.patch
+helium/core/container-tabs-popup-partition.patch
+helium/core/container-tabs-dialog-parent.patch

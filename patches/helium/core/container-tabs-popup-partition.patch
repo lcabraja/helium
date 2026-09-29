@@ -1,0 +1,40 @@
+--- a/chrome/browser/containers/container_browsertest.cc
++++ b/chrome/browser/containers/container_browsertest.cc
+@@ -284,10 +284,19 @@
+   auto* tab = Open(Work());
+-  content::WebContentsAddedObserver observer;
+-  ASSERT_TRUE(
+-      content::ExecJs(tab, "window.open('/popup', '_blank', 'noopener')"));
+-  auto* popup = observer.GetWebContents();
+-  ASSERT_TRUE(popup);
+-  ASSERT_TRUE(content::WaitForLoadStop(popup));
+-  EXPECT_EQ(Work(), GetContainerId(popup));
+-  EXPECT_EQ(true, content::EvalJs(popup, "window.opener === null"));
++  auto* partition = tab->GetPrimaryMainFrame()->GetStoragePartition();
++  ASSERT_TRUE(content::ExecJs(tab, "document.cookie = 'account=work; path=/';"));
++  for (const char* script : {
++           "window.open('/popup', '_blank', 'noopener');",
++           "const link = document.createElement('a');"
++           "link.href = '/linked-tab'; link.target = '_blank';"
++           "document.body.appendChild(link); link.click();"}) {
++    content::WebContentsAddedObserver observer;
++    ASSERT_TRUE(content::ExecJs(tab, script));
++    auto* popup = observer.GetWebContents();
++    ASSERT_TRUE(popup);
++    ASSERT_TRUE(content::WaitForLoadStop(popup));
++    EXPECT_EQ(Work(), GetContainerId(popup));
++    EXPECT_EQ(partition, popup->GetPrimaryMainFrame()->GetStoragePartition());
++    EXPECT_EQ("account=work", content::EvalJs(popup, "document.cookie"));
++    EXPECT_EQ(true, content::EvalJs(popup, "window.opener === null"));
++  }
+ }
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5688,2 +5688,7 @@
+           SiteInstance::CreateForGuest(GetBrowserContext(), partition_config);
++    } else if (source_site_instance->IsFixedStoragePartition() &&
++               !partition_config.is_default()) {
++      // Suppressing the opener separates script access, not stored sessions.
++      site_instance = SiteInstance::CreateForFixedStoragePartition(
++          GetBrowserContext(), params.target_url, partition_config);
+     } else {
