@@ -69,6 +69,64 @@
    EXPECT_EQ(profile_signals_report.site_isolation_enabled(),
              device_signals::GetSiteIsolationEnabled());
  }
+--- a/chrome/browser/extensions/api/identity/identity_apitest.cc
++++ b/chrome/browser/extensions/api/identity/identity_apitest.cc
+@@ -61,6 +61,7 @@
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/extensions/api/identity.h"
+ #include "chrome/common/pref_names.h"
++#include "components/signin/public/base/signin_pref_names.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/testing_browser_process.h"
+ #include "components/crx_file/id_util.h"
+--- a/chrome/browser/extensions/api/preference/preference_apitest.cc
++++ b/chrome/browser/extensions/api/preference/preference_apitest.cc
+@@ -21,6 +21,10 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#endif
+ #include "components/autofill/core/common/autofill_prefs.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/common/pref_names.h"
+@@ -531,6 +535,7 @@
+   EXPECT_FALSE(loaded_incognito_test_listener.was_satisfied());
+ }
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Tests the behavior of the Safe Browsing API as described in
+ // crbug.com/40681445.
+ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, SafeBrowsing_SetTrue) {
+@@ -596,6 +601,8 @@
+                                     /* expected_controlled */ false);
+ }
+
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ // Tests the behavior of the ThirdPartyCookies preference API.
+ // kCookieControlsMode should be set to kOff/kBlockThirdParty if
+ // ThirdPartyCookiesAllowed is set to true/false by an extension.
+--- a/chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_api_browsertest.cc
++++ b/chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_api_browsertest.cc
+@@ -2,6 +2,9 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+
++#include "components/safe_browsing/buildflags.h"
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_api.h"
+
+ #include <memory>
+@@ -193,3 +196,5 @@
+ }
+
+ }  // namespace extensions
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 --- a/chrome/browser/media/router/test/mock_dns_sd_registry.cc
 +++ b/chrome/browser/media/router/test/mock_dns_sd_registry.cc
 @@ -7,7 +7,7 @@
@@ -80,6 +138,85 @@
 
  MockDnsSdRegistry::~MockDnsSdRegistry() = default;
 
+--- a/chrome/browser/net/network_context_configuration_browsertest.cc
++++ b/chrome/browser/net/network_context_configuration_browsertest.cc
+@@ -1,6 +1,8 @@
+ // Copyright 2017 The Chromium Authors
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
++
++#include "components/safe_browsing/buildflags.h"
+
+ #include <atomic>
+ #include <optional>
+@@ -372,9 +374,13 @@
+         return g_browser_process->system_network_context_manager()
+             ->GetURLLoaderFactory();
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         return g_browser_process->safe_browsing_service()
+             ->GetURLLoaderFactory(browser()->GetProfile())
+             .get();
++#else
++        NOTREACHED();
++#endif
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+       case NetworkContextType::kOnDiskApp:
+@@ -398,8 +404,12 @@
+         return g_browser_process->system_network_context_manager()
+             ->GetContext();
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         return g_browser_process->safe_browsing_service()->GetNetworkContext(
+             browser()->GetProfile());
++#else
++        NOTREACHED();
++#endif
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+       case NetworkContextType::kOnDiskApp:
+@@ -619,9 +629,13 @@
+             ->FlushNetworkInterfaceForTesting();
+         break;
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         g_browser_process->safe_browsing_service()
+             ->FlushNetworkInterfaceForTesting(GetProfile());
+         break;
++#else
++        NOTREACHED();
++#endif
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+       case NetworkContextType::kInMemoryApp:
+@@ -2358,16 +2372,22 @@
+ #define INSTANTIATE_EXTENSION_TESTS(TestFixture)
+ #endif  // !BUILDFLAG(ENABLE_EXTENSIONS)
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#define INSTANTIATE_SAFE_BROWSING_TESTS(TestFixture) \
++  INSTANTIATE_TEST_SUITE_P(                                              \
++      SafeBrowsingNetworkContext, TestFixture,                           \
++      ::testing::Values(TEST_CASES(NetworkContextType::kSafeBrowsing)));
++#else
++#define INSTANTIATE_SAFE_BROWSING_TESTS(TestFixture)
++#endif
++
+ #define INSTANTIATE_TEST_CASES_FOR_TEST_FIXTURE(TestFixture)             \
+   INSTANTIATE_EXTENSION_TESTS(TestFixture)                               \
+   INSTANTIATE_TEST_SUITE_P(                                              \
+       SystemNetworkContext, TestFixture,                                 \
+       ::testing::Values(TEST_CASES(NetworkContextType::kSystem)));       \
+                                                                          \
+-  INSTANTIATE_TEST_SUITE_P(                                              \
+-      SafeBrowsingNetworkContext, TestFixture,                           \
+-      ::testing::Values(TEST_CASES(NetworkContextType::kSafeBrowsing))); \
+-                                                                         \
++  INSTANTIATE_SAFE_BROWSING_TESTS(TestFixture) \
+   INSTANTIATE_TEST_SUITE_P(                                              \
+       ProfileMainNetworkContext, TestFixture,                            \
+       ::testing::Values(TEST_CASES(NetworkContextType::kProfile)));      \
 --- a/chrome/browser/net/profile_network_context_service_browsertest.cc
 +++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
 @@ -69,7 +69,6 @@
@@ -321,6 +458,58 @@
 +#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 +
  }  // namespace policy
+--- a/chrome/browser/prefs/pref_functional_browsertest.cc
++++ b/chrome/browser/prefs/pref_functional_browsertest.cc
+@@ -261,31 +261,27 @@
+ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, PRE_TestPrivacySecurityPrefs) {
+   PrefService* prefs = browser()->GetProfile()->GetPrefs();
+
+-  static_assert(prefetch::NetworkPredictionOptions::kDefault !=
+-                    prefetch::NetworkPredictionOptions::kDisabled,
+-                "PrefsFunctionalTest.TestPrivacySecurityPrefs relies on "
+-                "predictive network actions being enabled by default.");
++  EXPECT_EQ(prefetch::PreloadPagesState::kNoPreloading,
++            prefetch::GetPreloadPagesState(*prefs));
++  prefetch::SetPreloadPagesState(prefs,
++                                 prefetch::PreloadPagesState::kStandardPreloading);
++
++  EXPECT_FALSE(prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
++  prefs->SetBoolean(embedder_support::kAlternateErrorPagesEnabled, true);
++
++  EXPECT_FALSE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
++  prefs->SetBoolean(prefs::kSearchSuggestEnabled, true);
++}
++
++// Verify the security preference under privacy across restarts. Part2
++IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
++  PrefService* prefs = browser()->GetProfile()->GetPrefs();
++
+   EXPECT_EQ(prefetch::PreloadPagesState::kStandardPreloading,
+             prefetch::GetPreloadPagesState(*prefs));
+-  prefetch::SetPreloadPagesState(prefs,
+-                                 prefetch::PreloadPagesState::kNoPreloading);
+-
+-  EXPECT_TRUE(prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
+-  prefs->SetBoolean(embedder_support::kAlternateErrorPagesEnabled, false);
+-
++  EXPECT_TRUE(
++      prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
+   EXPECT_TRUE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
+-  prefs->SetBoolean(prefs::kSearchSuggestEnabled, false);
+-}
+-
+-// Verify the security preference under privacy across restarts. Part2
+-IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
+-  PrefService* prefs = browser()->GetProfile()->GetPrefs();
+-
+-  EXPECT_EQ(prefetch::PreloadPagesState::kNoPreloading,
+-            prefetch::GetPreloadPagesState(*prefs));
+-  EXPECT_FALSE(
+-      prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
+-  EXPECT_FALSE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
+ }
+
+ // Verify that we have some Local State prefs.
 --- a/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
 +++ b/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
 @@ -57,7 +57,10 @@
@@ -563,6 +752,439 @@
 
  // End-to-end tests for the File System Access API. Among other things, these
  // test the integration between usage of the File System Access API and the
+--- a/chrome/browser/ui/views/frame/multi_contents_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view_browsertest.cc
+@@ -636,6 +636,8 @@
+ }
+
+ IN_PROC_BROWSER_TEST_F(MultiContentsViewBrowserTest, LeadingSeparatorLayout) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      prefs::kHeliumRoundedFrame, false);
+   MultiContentsView* view = multi_contents_view();
+   view->SetShouldShowTopSeparator(true);
+   view->drop_target_view_->Show(
+@@ -669,19 +671,13 @@
+   expected_separator_layouts.emplace_back(
+       view->contents_separators_.trailing_separator.get(), false,
+       gfx::Rect(10 + 100, 20, 0, 80));
+-  expected_separator_layouts.emplace_back(
+-      view->contents_separators_.corner_separator.get(), true,
+-      gfx::Rect(
+-          initial_bounds.origin(),
+-          view->contents_separators_.corner_separator->GetPreferredSize()));
+
+   CompareLayouts(expected_separator_layouts, actual_child_layouts);
+-  EXPECT_EQ(
+-      CornerOrientation::kTopLeading,
+-      view->contents_separators_.corner_separator->orientation_for_testing());
+ }
+
+ IN_PROC_BROWSER_TEST_F(MultiContentsViewBrowserTest, TrailingSeparatorLayout) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      prefs::kHeliumRoundedFrame, false);
+   MultiContentsView* view = multi_contents_view();
+   view->SetShouldShowTopSeparator(true);
+   view->drop_target_view_->Show(
+@@ -714,20 +710,8 @@
+   expected_separator_layouts.emplace_back(
+       view->contents_separators_.trailing_separator.get(), true,
+       gfx::Rect(10 + 100 - kSeparatorThickness, 20, kSeparatorThickness, 80));
+-  expected_separator_layouts.emplace_back(
+-      view->contents_separators_.corner_separator.get(), true,
+-      gfx::Rect(
+-          gfx::Point(initial_bounds.right() -
+-                         view->contents_separators_.corner_separator
+-                             ->GetPreferredSize()
+-                             .width(),
+-                     initial_bounds.y()),
+-          view->contents_separators_.corner_separator->GetPreferredSize()));
+
+   CompareLayouts(expected_separator_layouts, actual_child_layouts);
+-  EXPECT_EQ(
+-      CornerOrientation::kTopTrailing,
+-      view->contents_separators_.corner_separator->orientation_for_testing());
+ }
+
+ IN_PROC_BROWSER_TEST_F(MultiContentsViewBrowserTest, DropTargetLayout) {
+@@ -740,7 +724,7 @@
+     view->drop_target_view_->SetVisible(false);
+     view->drop_target_view_->animation_for_testing().End();
+     gfx::Rect remaining_space =
+-        view->CalculateDropTargetLayout(initial_bounds, actual_child_layouts);
++        view->CalculateDropTargetLayout(initial_bounds, {}, actual_child_layouts);
+
+     EXPECT_EQ(initial_bounds, remaining_space);
+     EXPECT_EQ(1u, actual_child_layouts.size());
+@@ -758,7 +742,7 @@
+         MultiContentsDropTargetView::DragType::kLink);
+     view->drop_target_view_->animation_for_testing().End();
+     gfx::Rect remaining_space =
+-        view->CalculateDropTargetLayout(initial_bounds, actual_child_layouts);
++        view->CalculateDropTargetLayout(initial_bounds, {}, actual_child_layouts);
+
+     const int drop_target_width =
+         view->drop_target_view_->GetSizeForAvailableSpace(
+@@ -785,7 +769,7 @@
+         MultiContentsDropTargetView::DragType::kLink);
+     view->drop_target_view_->animation_for_testing().End();
+     gfx::Rect remaining_space =
+-        view->CalculateDropTargetLayout(initial_bounds, actual_child_layouts);
++        view->CalculateDropTargetLayout(initial_bounds, {}, actual_child_layouts);
+
+     const int drop_target_width =
+         view->drop_target_view_->GetSizeForAvailableSpace(
+@@ -813,7 +797,7 @@
+         MultiContentsDropTargetView::DragType::kLink);
+     view->drop_target_view_->animation_for_testing().End();
+     gfx::Rect remaining_space =
+-        view->CalculateDropTargetLayout(initial_bounds, actual_child_layouts);
++        view->CalculateDropTargetLayout(initial_bounds, {}, actual_child_layouts);
+
+     const int drop_target_height =
+         view->drop_target_view_->GetSizeForAvailableSpace(
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/helium/helium_layout_state_controller.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/features.h"
+@@ -127,11 +128,7 @@
+   }
+
+   void PressCollapseButton() {
+-    region_view()
+-        ->GetTopContainer()
+-        ->GetCollapseButton()
+-        ->button_controller()
+-        ->NotifyClick();
++    chrome::ExecuteCommand(browser(), IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
+   }
+
+   void SetupExpandedVerticalTabStrip() {
+@@ -968,8 +965,8 @@
+   browser_view->OnImmersiveFullscreenEntered();
+
+   // 2. Try to disable vertical tabs via pref.
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kVerticalTabsEnabled,
+-                                                  false);
++  browser()->GetProfile()->GetPrefs()->SetInteger(prefs::kHeliumLayout,
++      std::to_underlying(HeliumLayoutType::kClassic));
+
+   // 3. Verify vertical tabs are STILL enabled (deferred).
+   EXPECT_TRUE(controller->ShouldDisplayVerticalTabs());
+@@ -984,8 +981,8 @@
+   browser_view->OnImmersiveFullscreenEntered();
+
+   // 7. Try to enable vertical tabs via pref.
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kVerticalTabsEnabled,
+-                                                  true);
++  browser()->GetProfile()->GetPrefs()->SetInteger(prefs::kHeliumLayout,
++      std::to_underlying(HeliumLayoutType::kVertical));
+
+   // 8. Verify vertical tabs are STILL disabled.
+   EXPECT_FALSE(controller->ShouldDisplayVerticalTabs());
+@@ -1137,171 +1134,12 @@
+   EXPECT_EQ(bounds.x(), region_view()->GetBoundsInScreen().x());
+ }
+
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       ExpandOnHoverLockBehavior) {
+-  // Set up collapsed vertical tab strip with expand on hover enabled.
+-  VerticalTabStripRegionView* view = region_view();
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  // Request focus so that the tab strip initiates expand on hover.
+-  view->RequestFocus();
+-
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return view->is_expanded_on_hover(); }));
+-
+-  // Verify that the tab strip stays expanded when given a `kKeepCurrentState`
+-  // lock.
+-  auto keep_expanded_lock =
+-      view->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepCurrentState);
+-  EXPECT_TRUE(view->is_expanded_on_hover());
+-
+-  // Verify that the tab strip disables the expand on hover state when given a
+-  // `kForceCollapse` lock.
+-  auto force_collapse_lock =
+-      view->GetExpandOnHoverLock(ExpandOnHoverLockType::kForceCollapse);
+-  EXPECT_FALSE(view->is_expanded_on_hover());
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       KeepCurrentStateLockPreventsExpandOnHover) {
+-  // Set up collapsed vertical tab strip with expand on hover enabled.
+-  VerticalTabStripRegionView* view = region_view();
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  // Acquire a `kKeepCurrentState` lock while the strip is collapsed.
+-  auto keep_expanded_lock =
+-      view->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepCurrentState);
+-
+-  // Request focus so that the tab strip would normally initiate expand on
+-  // hover.
+-  view->RequestFocus();
+-
+-  // Verify that the tab strip does not enter the expand on hover state.
+-  EXPECT_FALSE(view->is_expanded_on_hover());
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       KeepExpandedLockTriggersExpandOnHover) {
+-  // Set up collapsed vertical tab strip with expand on hover enabled.
+-  VerticalTabStripRegionView* view = region_view();
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  EXPECT_FALSE(view->is_expanded_on_hover());
+-
+-  // Acquire a `kKeepExpanded` lock while the strip is collapsed.
+-  auto keep_expanded_lock =
+-      view->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+-
+-  // Verify that expand on hover is triggered.
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return view->is_expanded_on_hover(); }));
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       ExpandOnHoverEnabledChanged) {
+-  // Fully collapse the tabstrip.
+-  state_controller()->RequestCollapse(true);
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  ASSERT_TRUE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled));
+-  ASSERT_FALSE(region_view()->is_expanded_on_hover());
+-
+-  region_view()->GetFocusManager()->SetFocusedView(region_view());
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return region_view()->is_expanded_on_hover(); }));
+-  ASSERT_TRUE(base::test::RunUntil([&]() { return !IsAnimatingSize(); }));
+-
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled, false);
+-  EXPECT_FALSE(region_view()->is_expanded_on_hover());
+-  EXPECT_TRUE(IsAnimatingSize());
+-  EXPECT_EQ(TabStripAnimations::kCollapseOnHover,
+-            BrowserAnimationController::From(browser())->GetCurrentMotion(
+-                TabStripAnimations::kVerticalTabStrip));
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest, ModeChanged) {
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled, false);
+-
+-  // Fully collapse the tabstrip.
+-  state_controller()->RequestCollapse(true);
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  ASSERT_TRUE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+-      prefs::kVerticalTabsEnabled));
+-  ASSERT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled));
+-  ASSERT_FALSE(region_view()->is_expanded_on_hover());
+-
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled, true);
+-  region_view()->GetFocusManager()->SetFocusedView(region_view());
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return region_view()->is_expanded_on_hover(); }));
+-  ASSERT_TRUE(base::test::RunUntil([&]() { return !IsAnimatingSize(); }));
+-
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kVerticalTabsEnabled,
+-                                                  false);
+-
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kVerticalTabsEnabled,
+-                                                  true);
+-  EXPECT_FALSE(region_view()->is_expanded_on_hover());
+-  EXPECT_FALSE(IsAnimatingSize());
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       ResizeAreaNotVisibleInExpandOnHoverState) {
+-  // Fully collapse the tabstrip.
+-  state_controller()->RequestCollapse(true);
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(
+-      prefs::kVerticalTabsExpandOnHoverEnabled, true);
+-
+-  region_view()->GetFocusManager()->SetFocusedView(region_view());
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return region_view()->is_expanded_on_hover(); }));
+-  ASSERT_FALSE(region_view()->resize_area_for_testing()->GetVisible());
+-}
+-
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       ExpandOnHoverDisabledWhenWindowInactive) {
+-  VerticalTabStripRegionView* view = region_view();
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  view->RequestFocus();
+-
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return view->is_expanded_on_hover(); }));
+-
+-  // Create a second window to make the first inactive.
+-  BrowserWindowInterface* second_browser =
+-      CreateBrowser(browser()->GetProfile());
+-  ASSERT_TRUE(second_browser);
+-
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return !view->is_expanded_on_hover(); }));
+-}
++
++
++
++
++
++
+
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+                        NewWindowInheritsActiveWindowVerticalTabsState) {
+@@ -1423,64 +1261,8 @@
+   EXPECT_EQ(new_controller->GetUncollapsedWidth(), 100);
+ }
+
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+-                       LogExpandOnHoverShowDurationMetrics) {
+-  base::HistogramTester histogram_tester;
+-
+-  // Set up collapsed vertical tab strip with expand on hover enabled.
+-  VerticalTabStripRegionView* view = region_view();
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-
+-  // Request focus so that the tab strip initiates expand on hover.
+-  view->RequestFocus();
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return view->is_expanded_on_hover(); }));
+-
+-  // Force collapse of the the tab strip.
+-  auto force_collapse_lock =
+-      view->GetExpandOnHoverLock(ExpandOnHoverLockType::kForceCollapse);
+-  ASSERT_TRUE(
+-      base::test::RunUntil([&]() { return !view->is_expanded_on_hover(); }));
+-
+-  histogram_tester.ExpectTotalCount(
+-      "Tabs.VerticalTabs.ExpandOnHover.ShowDuration", 1);
+-}
+
+ // TODO(crbug.com/513107068): Re-enable this test on Mac.
+-IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewGlassFrameTest,
+-                       DISABLED_GlassFrameAlphaTest) {
+-  auto* const background =
+-      region_view()->background()->AsA<CustomCornersBackground>();
+-
+-  // Background should be opaque during collapse and expand on hover,
+-  // and transparent otherwise.
+-  state_controller()->SetExpandOnHoverEnabled(true);
+-  state_controller()->RequestCollapse(true);
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return state_controller()->IsCollapsed(); }));
+-  RunScheduledLayouts();
+-  EXPECT_EQ(background->primary_color().opacity, 1.0f);
+-
+-  region_view()->RequestFocus();
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return region_view()->is_expanded_on_hover(); }));
+-  ASSERT_TRUE(base::test::RunUntil([&]() { return !IsAnimatingSize(); }));
+-  RunScheduledLayouts();
+-  EXPECT_EQ(background->primary_color().opacity, 1.0f);
+-
+-  state_controller()->SetExpandOnHoverEnabled(false);
+-  state_controller()->RequestCollapse(false);
+-  ASSERT_TRUE(base::test::RunUntil([&]() {
+-    return !region_view()->is_expanded_on_hover() &&
+-           !state_controller()->IsCollapsed();
+-  }));
+-  RunScheduledLayouts();
+-  EXPECT_EQ(background->primary_color().opacity, 0.0f);
+-}
+
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
+                        ScrollToFitTabsSingleBackgroundOverflow) {
+@@ -1646,7 +1428,7 @@
+ }
+
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripFocusModeLegacyTest,
+-                       ToggleOrientationUnfocusedHidesUnfocusButton) {
++                       ToggleOrientationClearsFocusedGroup) {
+   // Start in vertical mode, create tabs and group.
+   AppendTab();
+   AppendTab();
+@@ -1660,10 +1442,6 @@
+
+   // Focus the group while in vertical mode.
+   tab_strip_model()->SetFocusedGroup(group_id);
+-  EXPECT_TRUE(
+-      region_view()->GetTopContainer()->GetUnfocusButton()->GetVisible());
+-  EXPECT_FALSE(
+-      region_view()->GetTopContainer()->GetCollapseButton()->GetVisible());
+
+   // Switch to horizontal mode.
+   ExitVerticalTabsMode();
+@@ -1677,12 +1455,7 @@
+   EnterVerticalTabsMode();
+   EXPECT_TRUE(state_controller()->ShouldDisplayVerticalTabs());
+
+-  // In vertical mode, the unfocus button must NOT be visible, and the
+-  // collapse button MUST be visible.
+-  EXPECT_FALSE(
+-      region_view()->GetTopContainer()->GetUnfocusButton()->GetVisible());
+-  EXPECT_TRUE(
+-      region_view()->GetTopContainer()->GetCollapseButton()->GetVisible());
++  EXPECT_EQ(tab_strip_model()->GetFocusedGroup(), std::nullopt);
+ }
+
+ class VerticalTabStripFocusModeUnifiedTest
+@@ -2048,3 +1821,10 @@
+   EXPECT_EQ(group1, tab_strip_model()->GetFocusedGroup());
+ }
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++
++IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
++                       HeliumDisablesHoverExpansion) {
++  EXPECT_FALSE(state_controller()->IsExpandOnHoverEnabled());
++  state_controller()->SetExpandOnHoverEnabled(true);
++  EXPECT_FALSE(state_controller()->IsExpandOnHoverEnabled());
++}
+--- a/chrome/browser/ui/views/profiles/profile_menu_view_browsertest.cc
++++ b/chrome/browser/ui/views/profiles/profile_menu_view_browsertest.cc
+@@ -94,6 +94,7 @@
+ #include "chrome/common/chrome_paths.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "components/signin/public/base/signin_pref_names.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_link_drag_browsertest.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_link_drag_browsertest.cc
 @@ -471,16 +471,7 @@
@@ -610,6 +1232,19 @@
  class ShareServicePrerenderBrowserTest : public ShareServiceBrowserTest {
   public:
    ShareServicePrerenderBrowserTest()
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -3062,10 +3062,6 @@
+       "../browser/ui/webid/identity_dialog_controller_browsertest.cc",
+       "../common/chrome_paths_browsertest.cc",
+       "../common/time_format_browsertest.cc",
+-      "../renderer/accessibility/ax_tree_distiller_browsertest.cc",
+-      "../renderer/accessibility/read_anything/read_aloud_app_model_browsertest.cc",
+-      "../renderer/accessibility/read_anything/read_anything_app_controller_browsertest.cc",
+-      "../renderer/accessibility/read_anything/read_anything_app_model_browsertest.cc",
+       "../renderer/accessibility/read_anything/read_anything_test_utils.cc",
+       "../renderer/accessibility/read_anything/read_anything_test_utils.h",
+       "../renderer/autofill/autofill_renderer_browsertest.cc",
 --- a/chrome/test/base/testing_browser_process.cc
 +++ b/chrome/test/base/testing_browser_process.cc
 @@ -30,7 +30,9 @@

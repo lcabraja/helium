@@ -182,3 +182,11 @@ The manager, editor and deletion dialogs now use the initiating dialog as their
 parent. On macOS, attaching every dialog to the main window queued child sheets
 behind the manager, making Edit and Add appear unresponsive. The picker's
 Manage containers action also keeps the correct parent relationship.
+
+The full-checkout fixtures use Helium's disabled-by-default preloading, error
+pages and search suggestions, and verify changed values survive a restart.
+Layout fixtures use Helium's layout preference and remaining separators. Hover
+expansion is disabled in Helium, so its upstream scenarios are replaced by a
+check that the setting cannot enable it. The four renderer reading-mode suites
+are omitted because the upstream disable-AI patch removes their implementation
+files from the renderer target. Other renderer suites remain in the test build.
