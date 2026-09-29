@@ -22,6 +22,10 @@ or mix dependency versions to make configuration pass.
 1. Build for Apple Silicon with a deployment target compatible with macOS 15.5.
    Use a non-component build or package all required component libraries. The
    delivered app must work after removal from its original build directory.
+   Append `docs/macos-development.gn` after the common and macOS platform GN
+   flags. It records this development configuration and disables precompiled
+   headers, whose Chromium 154 Apple build rules produce incorrect output
+   paths. Run GN with `--fail-on-unused-args` before compiling.
 2. Resolve patch, GN, compiler and linker failures in the maintained patches.
    Reapply patches to confirm fixes survive a fresh build. Do not leave fixes
    only in the generated Chromium tree.

@@ -1,0 +1,19 @@
+# Append after the common flags.gn and platform flags.macos.gn files.
+# Build a self-contained Apple Silicon app compatible with macOS 15.5.
+target_cpu = "arm64"
+is_debug = false
+is_official_build = false
+is_component_build = false
+symbol_level = 1
+blink_symbol_level = 0
+v8_symbol_level = 0
+chrome_pgo_phase = 0
+use_system_xcode = true
+mac_deployment_target = "15.0"
+mac_min_system_version = "15.0"
+devtools_skip_typecheck = false
+
+# The Chromium 154 Apple toolchain writes PCH output to precompile.o rather
+# than the declared per-language .gch path. Clang also interprets its C++
+# header command with -fmodule-name as an incomplete module interface.
+enable_precompiled_headers = false
