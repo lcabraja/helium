@@ -172,7 +172,8 @@ and vertical-tab tests cover Helium's remaining bottom container. These changes
 allow shared test support to compile without restoring removed product features.
 
 Native UI checks found two container issues: macOS needs its shortcut in the
-Cocoa accelerator table, and noopener windows must preserve a fixed storage
+Cocoa accelerator table and a label in shortcut settings. Noopener windows must
+preserve a fixed storage
 partition when creating a new browsing instance. Both fixes are in the normal
 patch series. The popup regression test now checks storage identity, cookie
 sharing and a null opener for script-created windows and target-blank links.

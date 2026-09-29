@@ -6,3 +6,12 @@
 +    {IDC_NEW_CONTAINER_TAB, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::VKEY_T},
      {IDC_NEW_WINDOW, ui::EF_COMMAND_DOWN, ui::VKEY_N},
      {IDC_PASTE, ui::EF_COMMAND_DOWN, ui::VKEY_V},
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
+@@ -101,4 +101,6 @@
+     case IDC_NEW_TAB:
+       return Label(IDS_NEW_TAB);
++    case IDC_NEW_CONTAINER_TAB:
++      return Label(IDS_CONTAINER_NEW_TAB);
+     case IDC_NEW_SPLIT_TAB:
+       return Label(IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB);

@@ -1,3 +1,42 @@
+--- a/chrome/browser/download/download_browsertest.cc
++++ b/chrome/browser/download/download_browsertest.cc
+@@ -86,6 +86,7 @@
+ #include "components/download/public/common/download_item.h"
+ #include "components/download/public/common/download_item_impl.h"
+ #include "components/download/public/common/in_progress_download_manager.h"
++#include "components/download/public/common/simple_download_manager_coordinator.h"
+ #include "components/history/content/browser/download_conversions.h"
+ #include "components/history/core/browser/download_constants.h"
+ #include "components/history/core/browser/download_row.h"
+@@ -648,6 +649,7 @@
+
+ namespace {
+
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ class FakeDownloadProtectionService
+     : public safe_browsing::DownloadProtectionService {
+  public:
+@@ -739,6 +741,8 @@
+  protected:
+   std::unique_ptr<TestSafeBrowsingServiceFactory> test_safe_browsing_factory_;
+ };
++
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+
+ class DownloadWakeLockTest : public DownloadTestBase {
+  public:
+@@ -1767,9 +1771,11 @@
+
+ // Make sure a dangerous file shows up properly in the history.
+ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadHistoryDangerCheck) {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // Disable SafeBrowsing so that danger will be determined by downloads system.
+   browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
+                                                   false);
++#endif
+
+   // .swf file so that it's dangerous on all platforms (including CrOS).
+   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
 --- a/chrome/browser/enterprise/reporting/test/test_utils.cc
 +++ b/chrome/browser/enterprise/reporting/test/test_utils.cc
 @@ -13,6 +13,7 @@
@@ -239,6 +278,49 @@
    EXPECT_FALSE(IsQuicEnabled(profile_1()));
    EXPECT_FALSE(IsQuicEnabled(profile_2()));
  }
+--- a/chrome/browser/policy/test/safe_browsing_policy_browsertest.cc
++++ b/chrome/browser/policy/test/safe_browsing_policy_browsertest.cc
+@@ -1,6 +1,9 @@
+ // Copyright 2019 The Chromium Authors
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
++#include "components/safe_browsing/buildflags.h"
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include <string>
+ #include <vector>
+
+@@ -423,3 +426,5 @@
+ #endif  // !BUILDFLAG(IS_ANDROID)
+
+ }  // namespace policy
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/policy/test/v8_optimizer_policy_browsertest.cc
++++ b/chrome/browser/policy/test/v8_optimizer_policy_browsertest.cc
+@@ -17,6 +17,7 @@
+ #include "components/policy/core/common/policy_map.h"
+ #include "components/policy/policy_constants.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/browser/db/fake_database_manager.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/site_isolation_policy.h"
+@@ -216,6 +217,7 @@
+                          V8OptimizerPolicyTest,
+                          testing::Values(NOT_SET));
+
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class V8OptimizerPolicyTest_UseSiteFamiliarity : public V8OptimizerPolicyTest {
+  public:
+   V8OptimizerPolicyTest_UseSiteFamiliarity() {
+@@ -272,4 +274,6 @@
+                          V8OptimizerPolicyTest_UseSiteFamiliarity,
+                          testing::Values(NOT_SET));
+
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ }  // namespace policy
 --- a/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
 +++ b/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
 @@ -57,7 +57,10 @@
