@@ -1,0 +1,1210 @@
+--- a/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
++++ b/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
+@@ -26,6 +26,8 @@
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar2.png',
+@@ -33,6 +35,8 @@
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar3.png',
+@@ -40,6 +44,8 @@
+         index: 3,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ];
+     return avatarSelector;
+@@ -108,6 +114,8 @@
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar2.png',
+@@ -115,6 +123,8 @@
+         index: 2,
+         selected: true,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ];
+     await microtasksFinished();
+--- a/chrome/test/data/webui/extensions/sidebar_test.ts
++++ b/chrome/test/data/webui/extensions/sidebar_test.ts
+@@ -5,7 +5,7 @@
+ /** @fileoverview Suite of tests for extension-sidebar. */
+ import type {ExtensionsSidebarElement} from 'chrome://extensions/extensions.js';
+ import {navigation, Page} from 'chrome://extensions/extensions.js';
+-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
++import {assertDeepEquals, assertEquals, assertFalse} from 'chrome://webui-test/chai_assert.js';
+ import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
+ 
+ import {testVisible} from './test_util.js';
+@@ -52,7 +52,7 @@
+         // enableEnhancedSiteControls is set to false.
+         boundTestVisible('#sectionsSitePermissions', false);
+         boundTestVisible('#sectionsShortcuts', true);
+-        boundTestVisible('#moreExtensions', true);
++        boundTestVisible('#moreExtensions', false);
+ 
+         sidebar.enableEnhancedSiteControls = true;
+         await microtasksFinished();
+@@ -91,7 +91,6 @@
+         sidebar.$.sectionsSitePermissions.getAttribute('href'));
+     assertEquals(
+         '/shortcuts', sidebar.$.sectionsShortcuts.getAttribute('href'));
+-    assertTrue(sidebar.$.moreExtensions.querySelector('a')!
+-                   .getAttribute('href')!.includes('utm_source=ext_sidebar'));
++    assertFalse(!!sidebar.shadowRoot.querySelector('#moreExtensions'));
+   });
+ });
+--- a/chrome/test/data/webui/history/history_routing_test.ts
++++ b/chrome/test/data/webui/history/history_routing_test.ts
+@@ -57,12 +57,16 @@
+       return microtasksFinished();
+     });
+ 
++    test('synced tabs have no sidebar entry', () => {
++      assertEquals(null, sidebar.shadowRoot.querySelector('#syncedTabs'));
++    });
++
+     test('changing route changes active view', async () => {
+       assertEquals('history', app.$.content.selected);
+       assertEquals(app.$.history, app.$.tabsContent.selectedItem);
+ 
+       navigateTo('/syncedTabs', app);
+-      await eventToPromise('iron-select', sidebar.$.menu);
++      await microtasksFinished();
+ 
+       assertEquals('chrome://history/syncedTabs', window.location.href);
+       await microtasksFinished();
+@@ -115,8 +119,8 @@
+       assertEquals('history', sidebar.$.menu.selected);
+       assertEquals('chrome://history/', window.location.href);
+ 
+-      sidebar.$.syncedTabs.click();
+-      await eventToPromise('iron-select', sidebar.$.menu);
++      navigateTo('/syncedTabs', app);
++      await microtasksFinished();
+       await microtasksFinished();
+       assertEquals('syncedTabs', sidebar.$.menu.selected);
+       assertEquals('chrome://history/syncedTabs', window.location.href);
+@@ -138,8 +142,8 @@
+         assertEquals('grouped', sidebar.$.menu.selected);
+         assertEquals('chrome://history/grouped', window.location.href);
+ 
+-        keyDownOn(sidebar.$.syncedTabs, 0, [], ' ');
+-        await eventToPromise('iron-select', sidebar.$.menu);
++        navigateTo('/syncedTabs', app);
++        await microtasksFinished();
+         await microtasksFinished();
+         assertEquals('syncedTabs', sidebar.$.menu.selected);
+         assertEquals('chrome://history/syncedTabs', window.location.href);
+@@ -184,8 +188,8 @@
+           assertEquals('history', sidebar.$.menu.selected);
+           navigateTo('/?q=' + searchTerm, app);
+ 
+-          sidebar.$.syncedTabs.click();
+-          await eventToPromise('iron-select', sidebar.$.menu);
++          navigateTo('/syncedTabs', app);
++          await microtasksFinished();
+           await microtasksFinished();
+           assertEquals('syncedTabs', sidebar.$.menu.selected);
+           assertEquals(searchTerm, app.$.toolbar.searchTerm);
+--- a/chrome/test/data/webui/new_tab_page/BUILD.gn
++++ b/chrome/test/data/webui/new_tab_page/BUILD.gn
+@@ -18,7 +18,7 @@
+   files =
+       [
+         "app_focus_test.ts",
+-        "app_test.ts",
++        "helium_app_test.ts",
+         "background_image_test.ts",
+         "background_manager_test.ts",
+         "doodle_share_dialog_focus_test.ts",
+--- a/chrome/test/data/webui/new_tab_page/new_tab_page_browsertest.cc
++++ b/chrome/test/data/webui/new_tab_page/new_tab_page_browsertest.cc
+@@ -300,158 +300,10 @@
+ 
+ using NewTabPageAppTest = NewTabPageBrowserTest;
+ 
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Misc) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest Misc')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, OgbThemingRemoveScrim) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest OgbThemingRemoveScrim')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, OgbScrim) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest OgbScrim')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Theming) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest Theming')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Promo) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest Promo')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Clicks) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest Clicks')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, V2Modules) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest V2Modules')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, CounterfactualModules) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest CounterfactualModules')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, CustomizeChromeSidePanel) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest CustomizeChromeSidePanel')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, LensUploadDialog) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest LensUploadDialog')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Composebox) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest Composebox')");
+-}
+-
+-class NewTabPageAppComposeboxInvariantTest
+-    : public NewTabPageBrowserTest,
+-      public testing::WithParamInterface<std::tuple<const char*, bool>> {
+- public:
+-  const char* GetVariant() const { return std::get<0>(GetParam()); }
+-  bool GetAnimationEnabled() const { return std::get<1>(GetParam()); }
+-};
+-
+-IN_PROC_BROWSER_TEST_P(NewTabPageAppComposeboxInvariantTest, InvariantChecks) {
+-  RunTest("new_tab_page/app_test.js",
+-          base::StringPrintf("runMochaSuite('NewTabPageAppTest "
+-                             "ComposeboxInvariantChecks_%s_%s')",
+-                             GetVariant(),
+-                             GetAnimationEnabled() ? "AnimationEnabled"
+-                                                   : "AnimationDisabled"));
+-}
+-
+-INSTANTIATE_TEST_SUITE_P(
+-    All,
+-    NewTabPageAppComposeboxInvariantTest,
+-    testing::Combine(testing::Values("Control",
+-                                     "energy-effect-original",
+-                                     "energy-effect-darker-shadow",
+-                                     "pre-energy-effect-with-border",
+-                                     "energy-effect-fusebox"),
+-                     testing::Bool()));
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, ComposeEntryPoint) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest ComposeEntryPoint')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, RealboxNext) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest RealboxNext')");
+-}
+-
+-// TODO(crbug.com/554367777): Disabled by Gardener due to flakiness.
+-#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
+-#define MAYBE_ActionChips DISABLED_ActionChips
+-#else
+-#define MAYBE_ActionChips ActionChips
+-#endif
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, MAYBE_ActionChips) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest ActionChips')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, ThreadsRail) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest ThreadsRail')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, ReducedMotion) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppReducedMotionTest')");
+-}
+-
+-// TODO(crbug.com/428156129): Re-enable test
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, DISABLED_WallpaperSearch) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest WallpaperSearch')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, MicrosoftAuth) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest MicrosoftAuth')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, NewTabFooter) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest NewTabFooter')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, AutoRemovalToast) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest AutoRemovalToast')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, VoiceSearchCoherence) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest VoiceSearchCoherence')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, VoiceSearchAndSpeechRecognition) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest VoiceSearchAndSpeechRecognition')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, ContextMenuAnimation) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppContextMenuAnimationTest')");
+-}
+-
+-IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, EnergyEffectVariant) {
+-  RunTest("new_tab_page/app_test.js",
+-          "runMochaSuite('NewTabPageAppTest EnergyEffectVariant')");
++// Helium's new-tab template retains shortcuts, customization and theme
++// attribution. The Chromium app suites exercise removed Google UI.
++IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Helium) {
++  RunTest("new_tab_page/helium_app_test.js", "mocha.run()");
+ }
+ 
+ class NewTabPageModulesMostRelevantTabResumptionModuleTest
+--- a/chrome/test/data/webui/settings/appearance_page_test.ts
++++ b/chrome/test/data/webui/settings/appearance_page_test.ts
+@@ -3,11 +3,11 @@
+ // found in the LICENSE file.
+ 
+ import type {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+-import type {CustomizeColorSchemeModeClientRemote, SettingsAppearancePageElement, SettingsDropdownMenuElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
+-import {AppearanceBrowserProxyImpl, ColorSchemeMode, customizeColorSchemeModeBrowserProxyFactory, CustomizeColorSchemeModeHandlerRemote, loadTimeData, MetricsBrowserProxyImpl, PrefsBrowserProxy, PrefService, SystemTheme} from 'chrome://settings/settings.js';
++import type {SettingsAppearancePageElement, SettingsDropdownMenuElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
++import {AppearanceBrowserProxyImpl, customizeColorSchemeModeBrowserProxyFactory, CustomizeColorSchemeModeHandlerRemote, loadTimeData, MetricsBrowserProxyImpl, PrefsBrowserProxy, PrefService, SystemTheme} from 'chrome://settings/settings.js';
+ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ import {TestMock} from 'chrome://webui-test/test_mock.js';
+-import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
++import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+ 
+ import {TestAppearanceBrowserProxy} from './test_appearance_browser_proxy.js';
+ import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
+@@ -18,7 +18,6 @@
+ let appearanceBrowserProxy: TestAppearanceBrowserProxy;
+ let colorSchemeHandler: TestMock<CustomizeColorSchemeModeHandlerRemote>&
+     CustomizeColorSchemeModeHandlerRemote;
+-let colorSchemeCallbackRouter: CustomizeColorSchemeModeClientRemote;
+ let metricsBrowserProxy: TestMetricsBrowserProxy;
+ 
+ let prefService: PrefService;
+@@ -30,11 +29,10 @@
+ 
+   colorSchemeHandler =
+       TestMock.fromClass(CustomizeColorSchemeModeHandlerRemote);
+-  const {instance, remote} =
++  const {instance} =
+       customizeColorSchemeModeBrowserProxyFactory.createForTest(
+           colorSchemeHandler);
+   customizeColorSchemeModeBrowserProxyFactory.setInstance(instance);
+-  colorSchemeCallbackRouter = remote;
+ 
+   const fakePrefs = [
+     {
+@@ -238,14 +236,16 @@
+     // No custom nor system theme in use; "USE CLASSIC" should be hidden.
+     assertFalse(!!appearancePage.shadowRoot.querySelector('#useDefault'));
+     // The color scheme toggle should be visible when the classic theme is used.
+-    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
+ 
+     await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.GTK);
+     await microtasksFinished();
+     // If the system theme is in use, "USE CLASSIC" should show.
+     assertTrue(!!appearancePage.shadowRoot.querySelector('#useDefault'));
+     // The color scheme toggle should be hidden when the GTK theme is used.
+-    assertFalse(isVisible(appearancePage.$.colorSchemeModeRow));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
+ 
+     await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.DEFAULT);
+     await prefService.setPrefValue(THEME_ID_PREF, 'fake theme id');
+@@ -269,7 +269,8 @@
+     // The "USE GTK+" button shouldn't be showing if it's already in use.
+     assertFalse(!!appearancePage.shadowRoot.querySelector('#useGtk'));
+     // The color scheme toggle should be hidden when the GTK theme is used.
+-    assertFalse(isVisible(appearancePage.$.colorSchemeModeRow));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
+ 
+     appearanceBrowserProxy.setIsChildAccount(true);
+     await prefService.setPrefValue(SYSTEM_THEME_PREF, SystemTheme.DEFAULT);
+@@ -283,7 +284,8 @@
+             .querySelector<HTMLElement>('#themesSecondaryActions')!.hidden);
+     // The color scheme toggle should be visible when the classic theme is used,
+     // for child accounts.
+-    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
+ 
+     appearanceBrowserProxy.setIsChildAccount(false);
+     await prefService.setPrefValue(THEME_ID_PREF, 'fake theme id');
+@@ -294,7 +296,8 @@
+         appearancePage.shadowRoot
+             .querySelector<HTMLElement>('#themesSecondaryActions')!.hidden);
+     // The color scheme toggle should be visible when a custom theme is used.
+-    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
+ 
+     const button =
+         appearancePage.shadowRoot.querySelector<HTMLElement>('#useGtk');
+@@ -482,27 +485,11 @@
+         '#resetPinnedToolbarActions'));
+   });
+ 
+-  test('ColorSchemeMode', async () => {
+-    colorSchemeHandler.reset();
+-    await createAppearancePage();
+-    await colorSchemeHandler.whenCalled('initializeColorSchemeMode');
+-
+-    assertTrue(isVisible(appearancePage.$.colorSchemeModeRow));
+-    assertEquals(
+-        1, colorSchemeHandler.getCallCount('initializeColorSchemeMode'));
+-
+-    // Assert that changes to the color scheme mode updates the select menu.
+-    colorSchemeCallbackRouter.setColorSchemeMode(ColorSchemeMode.kLight);
+-    assertEquals(
+-        `${ColorSchemeMode.kLight}`,
+-        appearancePage.$.colorSchemeModeSelect.value);
+-
+-    // Assert that changing the select menu updates the color scheme.
+-    appearancePage.$.colorSchemeModeSelect.value = `${ColorSchemeMode.kDark}`;
+-    appearancePage.$.colorSchemeModeSelect.dispatchEvent(new Event('change'));
+-    const handlerArg =
+-        await colorSchemeHandler.whenCalled('setColorSchemeMode');
+-    assertEquals(ColorSchemeMode.kDark, handlerArg);
++  test('color scheme controls live in the customization panel', () => {
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeRow'));
++    assertEquals(null, appearancePage.shadowRoot.querySelector(
++        '#colorSchemeModeSelect'));
+   });
+ 
+   test('default zoom handling', async function() {
+--- a/chrome/test/data/webui/settings/import_data_dialog_test.ts
++++ b/chrome/test/data/webui/settings/import_data_dialog_test.ts
+@@ -50,6 +50,7 @@
+   const browserProfiles: BrowserProfile[] = [
+     {
+       autofillFormData: true,
++      extensions: false,
+       favorites: true,
+       history: true,
+       index: 0,
+@@ -60,6 +61,7 @@
+     },
+     {
+       autofillFormData: true,
++      extensions: false,
+       favorites: true,
+       history: false,  // Emulate unsupported import option
+       index: 1,
+@@ -70,6 +72,7 @@
+     },
+     {
+       autofillFormData: false,
++      extensions: false,
+       favorites: true,
+       history: false,
+       index: 2,
+--- a/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
++++ b/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
+@@ -24,6 +24,9 @@
+       'setProfileIconToGaiaAvatar',
+       'setProfileIconToDefaultAvatar',
+       'setProfileName',
++      'setProfileIconToCustomAvatar',
++      'setCustomAvatarFromFile',
++      'clearCustomAvatar',
+       'getProfileShortcutStatus',
+       'addProfileShortcut',
+       'removeProfileShortcut',
+@@ -42,6 +45,8 @@
+         label: 'fake-icon-1',
+         index: 1,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+         selected: false,
+       },
+       {
+@@ -50,12 +55,16 @@
+         index: 2,
+         selected: true,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'gaia-icon.png',
+         label: 'gaia-icon',
+         index: 3,
+         isGaiaAvatar: true,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+         selected: false,
+       },
+     ]);
+@@ -67,6 +76,18 @@
+ 
+   setProfileIconToDefaultAvatar(index: number) {
+     this.methodCalled('setProfileIconToDefaultAvatar', [index]);
++  }
++
++  setProfileIconToCustomAvatar() {
++    this.methodCalled('setProfileIconToCustomAvatar');
++  }
++
++  setCustomAvatarFromFile(dataUrl: string) {
++    this.methodCalled('setCustomAvatarFromFile', dataUrl);
++  }
++
++  clearCustomAvatar() {
++    this.methodCalled('clearCustomAvatar');
+   }
+ 
+   setProfileName(name: string) {
+--- a/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
+@@ -6,7 +6,7 @@
+ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+-import type {SettingsSyncControlsElement} from 'chrome://settings/lazy_load.js';
++import type {SettingsSyncControlsElement} from 'chrome://settings/people_page/sync_controls.js';
+ import type {CrRadioButtonElement, CrToggleElement, SyncPrefs} from 'chrome://settings/settings.js';
+ import {loadTimeData, Router, resetRouterForTesting, SignedInState, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+ import {assertEquals, assertDeepEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+--- a/chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts
+@@ -6,7 +6,8 @@
+ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+-import type {CrInputElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
++import type {SettingsSyncPageElement} from 'chrome://settings/people_page/sync_page.js';
++import type {CrInputElement} from 'chrome://settings/lazy_load.js';
+ import {Router, SignedInState, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+--- a/chrome/test/data/webui/settings/people_page_sync_page_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_page_test.ts
+@@ -6,7 +6,8 @@
+ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+-import type {CrExpandButtonElement, CrInputElement, SettingsSyncEncryptionOptionsElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
++import type {SettingsSyncPageElement} from 'chrome://settings/people_page/sync_page.js';
++import type {CrExpandButtonElement, CrInputElement, SettingsSyncEncryptionOptionsElement} from 'chrome://settings/lazy_load.js';
+ // <if expr="not is_chromeos">
+ import type {CrDialogElement} from 'chrome://settings/lazy_load.js';
+ // </if>
+--- a/chrome/test/data/webui/settings/personalization_options_test.ts
++++ b/chrome/test/data/webui/settings/personalization_options_test.ts
+@@ -19,9 +19,6 @@
+ // </if>
+ 
+ // <if expr="not is_chromeos">
+-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+-import {ChromeSigninUserChoice} from 'chrome://settings/settings.js';
+-import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+ 
+ // </if>
+ 
+@@ -96,263 +93,14 @@
+     resetPageVisibilityForTesting();
+   });
+ 
+-  // <if expr="not is_chromeos">
+-  test('chromeSigninUserChoiceAvailableInitialization', async function() {
+-    assertFalse(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-
+-    const infoResponse = {
+-      shouldShowSettings: true,
+-      choice: ChromeSigninUserChoice.NO_CHOICE,
+-      signedInEmail: 'test@gmail.com',
+-    };
+-    syncBrowserProxy.setGetUserChromeSigninUserChoiceInfoResponse(infoResponse);
+-
+-    buildTestElement();  // Rebuild the element simulating a fresh start.
+-    await syncBrowserProxy.whenCalled('getChromeSigninUserChoiceInfo');
+-    await microtasksFinished();
+-    assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-    const descriptionText =
+-        testElement.shadowRoot.querySelector(
+-                                  '#chromeSigninChoiceDescription')!.innerHTML;
+-    assertTrue(descriptionText.includes(infoResponse.signedInEmail));
+-  });
+-
+-  test('chromeSigninUserChoiceAvailabilityUpdate', async function() {
+-    const infoResponse = {
+-      shouldShowSettings: true,
+-      choice: ChromeSigninUserChoice.NO_CHOICE,
+-      signedInEmail: 'test@gmail.com',
+-    };
+-    syncBrowserProxy.setGetUserChromeSigninUserChoiceInfoResponse(infoResponse);
+-
+-    buildTestElement();  // Rebuild the element simulating a fresh start.
+-    await syncBrowserProxy.whenCalled('getChromeSigninUserChoiceInfo');
+-    await microtasksFinished();
+-    assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-
+-    // New response to return should not show.
+-    const infoResponse_hide = {
+-      shouldShowSettings: false,
+-      choice: ChromeSigninUserChoice.NO_CHOICE,
+-      signedInEmail: '',
+-    };
+-
+-    webUIListenerCallback(
+-        'chrome-signin-user-choice-info-change', infoResponse_hide);
+-    await microtasksFinished();
+-    assertFalse(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-
+-    // Original response to return should show again.
+-    webUIListenerCallback(
+-        'chrome-signin-user-choice-info-change', infoResponse);
+-    await microtasksFinished();
+-    assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-  });
+-
+-  test('chromeSigninUserChoiceUpdatedExternally', async function() {
+-    const infoResponse = {
+-      shouldShowSettings: true,
+-      choice: ChromeSigninUserChoice.NO_CHOICE,
+-      signedInEmail: 'test@gmail.com',
+-    };
+-    syncBrowserProxy.setGetUserChromeSigninUserChoiceInfoResponse(infoResponse);
+-
+-    buildTestElement();  // Rebuild the element simulating a fresh start.
+-    await syncBrowserProxy.whenCalled('getChromeSigninUserChoiceInfo');
+-    await microtasksFinished();
+-    assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-
+-    // `ChromeSigninUserChoice.NO_CHOICE` leads to no value set.
+-    assertEquals(
+-        Number(testElement.$.chromeSigninUserChoiceSelection.value),
+-        ChromeSigninUserChoice.NO_CHOICE);
+-
+-    infoResponse.choice = ChromeSigninUserChoice.SIGNIN;
+-    webUIListenerCallback(
+-        'chrome-signin-user-choice-info-change', infoResponse);
+-    await microtasksFinished();
+-    assertEquals(
+-        Number(testElement.$.chromeSigninUserChoiceSelection.value),
+-        ChromeSigninUserChoice.SIGNIN);
+-  });
+-
+-  test(
+-      'chromeSigninUserChoiceAvailabilityUpdateWithSnackbarEnabled',
+-      async function() {
+-        const infoResponse = {
+-          shouldShowSettings: true,
+-          choice: ChromeSigninUserChoice.ALWAYS_ASK,
+-          signedInEmail: 'test@gmail.com',
+-        };
+-        syncBrowserProxy.setGetUserChromeSigninUserChoiceInfoResponse(
+-            infoResponse);
+-
+-        // Rebuild the element simulating a fresh start.
+-        buildTestElement();
+-        await syncBrowserProxy.whenCalled('getChromeSigninUserChoiceInfo');
+-        await microtasksFinished();
+-        assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-
+-        // Update user selection
+-        const menu = testElement.$.chromeSigninUserChoiceSelection;
+-        menu.value = ChromeSigninUserChoice.SIGNIN.toString();
+-        menu.dispatchEvent(new CustomEvent('change'));
+-        await microtasksFinished();
+-
+-        assertTrue(isVisible(testElement.$.chromeSigninUserChoiceSelection));
+-        assertTrue(testElement.$.chromeSigninUserChoiceToast.open);
+-      });
+-
+-  test('signinAllowedToggle', async function() {
+-    const toggle = testElement.$.signinAllowedToggle;
+-    assertTrue(isVisible(toggle));
+-
+-    testElement.syncStatus = {
+-      signedInState: SignedInState.SIGNED_OUT,
+-      statusAction: StatusAction.NO_ACTION,
+-    };
+-    await microtasksFinished();
+-    // Check initial setup.
+-    assertTrue(toggle.checked);
+-    assertTrue(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertFalse(testElement.$.toast.open);
+-
+-    // When the user is signed out, clicking the toggle should work
+-    // normally and the restart toast should be opened.
+-    toggle.click();
+-    await microtasksFinished();
+-    assertFalse(toggle.checked);
+-    assertFalse(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertTrue(testElement.$.toast.open);
+-
+-    // Clicking it again, turns the toggle back on. The toast remains
+-    // open.
+-    toggle.click();
+-    await microtasksFinished();
+-    assertTrue(toggle.checked);
+-    assertTrue(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertTrue(testElement.$.toast.open);
+-
+-    // Reset toast.
+-    testElement.$.toast.hide();
+-
+-    // When the user is part way through sync setup, the toggle should be
+-    // disabled in an on state.
+-    testElement.syncStatus = {
+-      firstSetupInProgress: true,
+-      statusAction: StatusAction.NO_ACTION,
+-    };
+-    await microtasksFinished();
+-    assertTrue(toggle.disabled);
+-    assertTrue(toggle.checked);
+-
+-    testElement.syncStatus = {
+-      signedInState: SignedInState.SYNCING,
+-      statusAction: StatusAction.NO_ACTION,
+-    };
+-    await microtasksFinished();
+-    // When the user is signed in, clicking the toggle should open the
+-    // sign-out dialog.
+-    assertFalse(
+-        !!testElement.shadowRoot.querySelector('settings-signout-dialog'));
+-    toggle.click();
+-
+-    await eventToPromise('cr-dialog-open', testElement);
+-    await microtasksFinished();
+-    // The toggle remains on.
+-    assertTrue(toggle.checked);
+-    assertTrue(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertFalse(testElement.$.toast.open);
+-
+-    let signoutDialog =
+-        testElement.shadowRoot.querySelector('settings-signout-dialog');
+-    assertTrue(!!signoutDialog);
+-    assertTrue(signoutDialog.$.dialog.open);
+-
+-    // The user clicks cancel.
+-    const cancel = signoutDialog.shadowRoot.querySelector<HTMLElement>(
+-        '#disconnectCancel')!;
+-    cancel.click();
+-
+-    await eventToPromise('close', signoutDialog);
+-    await microtasksFinished();
+-    assertFalse(
+-        !!testElement.shadowRoot.querySelector('settings-signout-dialog'));
+-
+-    // After the dialog is closed, the toggle remains turned on.
+-    assertTrue(toggle.checked);
+-    assertTrue(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertFalse(testElement.$.toast.open);
+-
+-    // The user clicks the toggle again.
+-    toggle.click();
+-    await eventToPromise('cr-dialog-open', testElement);
+-    await microtasksFinished();
+-    signoutDialog =
+-        testElement.shadowRoot.querySelector('settings-signout-dialog');
+-    assertTrue(!!signoutDialog);
+-    assertTrue(signoutDialog.$.dialog.open);
+-
+-    // The user clicks confirm, which signs them out.
+-    const disconnectConfirm =
+-        signoutDialog.shadowRoot.querySelector<HTMLElement>(
+-            '#disconnectConfirm')!;
+-    disconnectConfirm.click();
+-
+-    await eventToPromise('close', signoutDialog);
+-    await microtasksFinished();
+-    // After the dialog is closed, the toggle is turned off and the
+-    // toast is shown.
+-    assertFalse(toggle.checked);
+-    assertFalse(
+-        prefService.getPref<boolean>('signin.allowed_on_next_startup').value);
+-    assertTrue(testElement.$.toast.open);
+-  });
+-
+-  // Tests that the "Allow sign-in" toggle is hidden when signin is not
+-  // available.
+-  test('signinUnavailable', function() {
+-    loadTimeData.overrideValues({'signinAvailable': false});
+-    buildTestElement();  // Rebuild the element after modifying loadTimeData.
+-    assertFalse(isVisible(testElement.$.signinAllowedToggle));
+-  });
+-
+-  test('searchSuggestToggleShownIfPageVisibilityUndefined', function() {
+-    // This is the most common case, as in non-Guest profiles on Desktop
+-    // platforms pageVisibility is undefined.
+-    assertTrue(isVisible(
+-        testElement.shadowRoot.querySelector('#searchSuggestToggle')));
+-  });
+-
+-  test('searchSuggestToggleHiddenByPageVisibility', function() {
+-    resetPageVisibilityForTesting({
+-      privacy: {
+-        searchPrediction: false,
+-        networkPrediction: false,
+-      },
+-    });
+-    buildTestElement();
+-    assertFalse(isVisible(
+-        testElement.shadowRoot.querySelector('#searchSuggestToggle')));
+-  });
+-
+-  test('searchSuggestToggleShownByPageVisibility', function() {
+-    resetPageVisibilityForTesting({
+-      privacy: {
+-        searchPrediction: true,
+-        networkPrediction: false,
+-      },
+-    });
+-    buildTestElement();
+-    assertTrue(isVisible(
+-        testElement.shadowRoot.querySelector('#searchSuggestToggle')));
+-  });
+-  // </if>
++  test('Google sign-in and search suggestions controls are absent', () => {
++    for (const selector of [
++      '#chromeSigninUserChoiceSelection', '#signinAllowedToggle',
++      '#searchSuggestToggle',
++    ]) {
++      assertEquals(null, testElement.shadowRoot.querySelector(selector));
++    }
++  });
+ 
+   test('searchAggregatorSuggestNotShown', function() {
+     loadTimeData.overrideValues({showSearchAggregatorSuggest: false});
+--- a/chrome/test/data/webui/settings/system_page_test.ts
++++ b/chrome/test/data/webui/settings/system_page_test.ts
+@@ -40,7 +40,11 @@
+ class TestSystemPageBrowserProxy extends TestBrowserProxy implements
+     SystemPageBrowserProxy {
+   constructor() {
+-    super(['showProxySettings']);
++    super(['showProxySettings', 'openKeyboardShortcutsSettings']);
++  }
++
++  openKeyboardShortcutsSettings() {
++    this.methodCalled('openKeyboardShortcutsSettings');
+   }
+ 
+   showProxySettings() {
+--- a/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
++++ b/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
+@@ -145,6 +145,7 @@
+         shouldConfirmRemoval: false,
+         url: 'https://search.foo.com/search?p=%s',
+         urlLocked: false,
++        suggestionsUrl: '',
+       },
+       override || {});
+ }
+@@ -178,6 +179,7 @@
+         shouldConfirmRemoval: false,
+         url: 'chrome-extension://dummyextensionid/?q=%s',
+         urlLocked: false,
++        suggestionsUrl: '',
+       },
+       override || {});
+ }
+--- a/chrome/test/data/webui/side_panel/customize_chrome/BUILD.gn
++++ b/chrome/test/data/webui/side_panel/customize_chrome/BUILD.gn
+@@ -9,7 +9,7 @@
+ 
+   files = [
+     "app_test.ts",
+-    "appearance_test.ts",
++    "helium_appearance_test.ts",
+     "button_label_test.ts",
+     "cards_test.ts",
+     "categories_test.ts",
+--- a/chrome/test/data/webui/side_panel/customize_chrome/customize_chrome_browsertest.cc
++++ b/chrome/test/data/webui/side_panel/customize_chrome/customize_chrome_browsertest.cc
+@@ -42,7 +42,7 @@
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Appearance) {
+-  RunTest("side_panel/customize_chrome/appearance_test.js", "mocha.run()");
++  RunTest("side_panel/customize_chrome/helium_appearance_test.js", "mocha.run()");
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Categories) {
+--- a/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
++++ b/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
+@@ -139,6 +139,8 @@
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-2.png',
+@@ -146,6 +148,8 @@
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-3.png',
+@@ -153,6 +157,8 @@
+         index: 3,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ]);
+   }
+--- a/chrome/test/data/webui/signin/test_profile_customization_browser_proxy.ts
++++ b/chrome/test/data/webui/signin/test_profile_customization_browser_proxy.ts
+@@ -46,6 +46,8 @@
+         index: 0,
+         selected: true,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-1.png',
+@@ -53,6 +55,8 @@
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-2.png',
+@@ -60,6 +64,8 @@
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ]);
+   }
+--- /dev/null
++++ b/chrome/test/data/webui/new_tab_page/helium_app_test.ts
+@@ -0,0 +1,130 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++import 'chrome://new-tab-page/lazy_load.js';
++
++import type {AppElement, CustomizeButtonsDocumentRemote, PageRemote} from 'chrome://new-tab-page/new_tab_page.js';
++import {BackgroundManager, CustomizeButtonsDocumentCallbackRouter, CustomizeButtonsHandlerRemote, CustomizeButtonsProxy, NewTabPageProxy, PageCallbackRouter, PageHandlerRemote, WindowProxy} from 'chrome://new-tab-page/new_tab_page.js';
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
++import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
++import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
++import type {TestMock} from 'chrome://webui-test/test_mock.js';
++import {microtasksFinished} from 'chrome://webui-test/test_util.js';
++
++import {createBackgroundImage, createTheme, installMock} from './test_support.js';
++
++suite('HeliumNewTabPageAppTest', () => {
++  let app: AppElement;
++  let callback: PageRemote;
++  let customizeCallback: CustomizeButtonsDocumentRemote;
++  let customizeHandler: TestMock<CustomizeButtonsHandlerRemote>;
++  let background: TestMock<BackgroundManager>;
++
++  async function recreateApp() {
++    document.body.innerHTML = window.trustedTypes!.emptyHTML;
++    app = document.createElement('ntp-app');
++    document.body.appendChild(app);
++    await microtasksFinished();
++  }
++
++  setup(async () => {
++    document.body.innerHTML = window.trustedTypes!.emptyHTML;
++    loadTimeData.overrideValues({
++      shortcutsEnabled: true,
++      showCustomizeButton: true,
++      modulesEnabled: false,
++      wallpaperSearchButtonEnabled: false,
++      searchboxShowComposeEntrypoint: false,
++      searchboxShowComposebox: false,
++      contextMenuAnimationLimitingEnabled: false,
++    });
++    fakeMetricsPrivate();
++    const windowProxy = installMock(WindowProxy);
++    windowProxy.setResultFor('url', new URL('chrome://new-tab-page/'));
++    windowProxy.setPromiseResolveFor('waitForLazyRender');
++    windowProxy.setResultMapperFor('matchMedia', (media: string) => ({
++      matches: false,
++      media,
++      addListener: () => {},
++      addEventListener: () => {},
++      removeListener: () => {},
++      removeEventListener: () => {},
++    }));
++    const handler = installMock(
++        PageHandlerRemote,
++        mock => NewTabPageProxy.setInstance(mock, new PageCallbackRouter()));
++    handler.setPromiseResolveFor('getMostVisitedSettings', {
++      customLinksEnabled: false,
++      shortcutsVisible: true,
++    });
++    handler.setPromiseResolveFor(
++        'canShowRealboxContextMenuAnimation', {canShow: false});
++    callback = NewTabPageProxy.getInstance()
++                   .callbackRouter.$.bindNewPipeAndPassRemote();
++    customizeHandler = installMock(
++        CustomizeButtonsHandlerRemote,
++        mock => CustomizeButtonsProxy.setInstance(
++            mock, new CustomizeButtonsDocumentCallbackRouter()));
++    customizeCallback = CustomizeButtonsProxy.getInstance()
++                            .callbackRouter.$.bindNewPipeAndPassRemote();
++    background = installMock(BackgroundManager);
++    background.setPromiseResolveFor('getBackgroundImageLoadTime', 123);
++    await recreateApp();
++  });
++
++  test('renders shortcuts and customization without Google UI', () => {
++    assertTrue(!!app.shadowRoot.querySelector('#mostVisited'));
++    assertTrue(!!app.$.customizeButtons);
++    for (const selector of [
++      '#logo', '#searchbox', '#composebox', '#oneGoogleBar', '#modules',
++      '#undoToast', '#webstoreToast', '#lensUploadDialog',
++    ]) {
++      assertEquals(null, app.shadowRoot.querySelector(selector), selector);
++    }
++  });
++
++  test('honors shortcut and customization preferences', async () => {
++    loadTimeData.overrideValues({
++      shortcutsEnabled: false,
++      showCustomizeButton: false,
++    });
++    await recreateApp();
++    assertEquals(null, app.shadowRoot.querySelector('#mostVisited'));
++    assertEquals(null, app.shadowRoot.querySelector('#customizeButtons'));
++  });
++
++  test('customization button opens the side panel', async () => {
++    app.$.customizeButtons.dispatchEvent(new Event('customize-click'));
++    const args =
++        await customizeHandler.whenCalled('setCustomizeChromeSidePanelVisible');
++    assertTrue(args[0]);
++    customizeCallback.setCustomizeChromeSidePanelVisibility(true);
++    await customizeCallback.$.flushForTesting();
++    await microtasksFinished();
++    assertTrue(app.$.customizeButtons.showCustomize);
++    customizeCallback.setCustomizeChromeSidePanelVisibility(false);
++    await customizeCallback.$.flushForTesting();
++    await microtasksFinished();
++    assertFalse(app.$.customizeButtons.showCustomize);
++  });
++
++  test('updates background and theme attribution', async () => {
++    const theme = createTheme();
++    theme.backgroundImage = createBackgroundImage('chrome://theme/background');
++    theme.backgroundImage.attributionUrl = 'chrome://theme/attribution';
++    callback.setTheme(theme);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertDeepEquals(
++        theme.backgroundColor,
++        await background.whenCalled('setBackgroundColor'));
++    assertTrue(app.hasAttribute('show-background-image'));
++    assertTrue(!!app.shadowRoot.querySelector('#themeAttribution'));
++    callback.setTheme(createTheme());
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertFalse(app.hasAttribute('show-background-image'));
++    assertEquals(null, app.shadowRoot.querySelector('#themeAttribution'));
++  });
++});
+--- /dev/null
++++ b/chrome/test/data/webui/side_panel/customize_chrome/helium_appearance_test.ts
+@@ -0,0 +1,134 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++import 'chrome://customize-chrome-side-panel.top-chrome/appearance.js';
++
++import type {AppearanceElement} from 'chrome://customize-chrome-side-panel.top-chrome/appearance.js';
++import type {CustomizeChromePageRemote, Theme} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
++import {CustomizeChromePageCallbackRouter, CustomizeChromePageHandlerRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
++import {CustomizeChromeApiProxy} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome_api_proxy.js';
++import type {ManagedDialogElement} from 'chrome://resources/cr_components/managed_dialog/managed_dialog.js';
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
++import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
++import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
++import type {TestMock} from 'chrome://webui-test/test_mock.js';
++import {microtasksFinished} from 'chrome://webui-test/test_util.js';
++
++import {createBackgroundImage, createTheme, createThirdPartyThemeInfo, installMock} from './test_support.js';
++
++suite('HeliumAppearanceTest', () => {
++  let appearance: AppearanceElement;
++  let callback: CustomizeChromePageRemote;
++  let handler: TestMock<CustomizeChromePageHandlerRemote>;
++
++  async function setTheme(theme: Theme) {
++    callback.setTheme(theme);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++  }
++
++  setup(async () => {
++    document.body.innerHTML = window.trustedTypes!.emptyHTML;
++    loadTimeData.overrideValues({
++      showDeviceThemeToggle: true,
++      footerEnabled: false,
++    });
++    fakeMetricsPrivate();
++    handler = installMock(
++        CustomizeChromePageHandlerRemote,
++        mock => CustomizeChromeApiProxy.setInstance(
++            mock, new CustomizeChromePageCallbackRouter()));
++    callback = CustomizeChromeApiProxy.getInstance()
++                   .callbackRouter.$.bindNewPipeAndPassRemote();
++    appearance = document.createElement('customize-chrome-appearance');
++    document.body.appendChild(appearance);
++    await setTheme(createTheme());
++  });
++
++  test('uses one local wallpaper button and hides Google controls', () => {
++    assertFalse(appearance.$.editThemeButton.hidden);
++    appearance.$.editThemeButton.click();
++    assertEquals(1, handler.getCallCount('chooseLocalCustomBackground'));
++    assertTrue(appearance.$.themeSnapshot.hidden);
++    for (const id of [
++      'uploadedImageButton', 'searchedImageButton', 'wallpaperSearchButton',
++      'thirdPartyManageLinkButton',
++    ]) {
++      assertEquals(null, appearance.shadowRoot.querySelector(`#${id}`));
++    }
++    assertFalse(appearance.$.chromeColors.hidden);
++    assertTrue(appearance.$.setClassicChromeButton.hidden);
++  });
++
++  test('honors wallpaper editability changes', async () => {
++    callback.setThemeEditable(false);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertTrue(appearance.$.editThemeButton.hidden);
++    callback.setThemeEditable(true);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertFalse(appearance.$.editThemeButton.hidden);
++  });
++
++  for (const searched of [false, true]) {
++    test(`local wallpaper can be replaced or reset, searched=${searched}`,
++         async () => {
++           const theme = createTheme();
++           theme.backgroundImage = createBackgroundImage('local');
++           theme.backgroundImage.isUploadedImage = true;
++           if (searched) {
++             theme.backgroundImage.localBackgroundId = {low: 10n, high: 20n};
++           }
++           await setTheme(theme);
++           assertFalse(appearance.$.editThemeButton.hidden);
++           appearance.$.editThemeButton.click();
++           assertEquals(1, handler.getCallCount('chooseLocalCustomBackground'));
++           assertFalse(appearance.$.setClassicChromeButton.hidden);
++           appearance.$.setClassicChromeButton.click();
++           assertEquals(1, handler.getCallCount('removeBackgroundImage'));
++           assertEquals(1, handler.getCallCount('setDefaultColor'));
++         });
++  }
++
++  for (const button of ['editThemeButton', 'setClassicChromeButton'] as const) {
++    test(`managed theme blocks ${button}`, async () => {
++      const theme = createTheme();
++      theme.backgroundManagedByPolicy = true;
++      theme.backgroundImage = createBackgroundImage('managed');
++      await setTheme(theme);
++      appearance.$[button].click();
++      await microtasksFinished();
++      const dialog = appearance.shadowRoot.querySelector<ManagedDialogElement>(
++          'managed-dialog');
++      assertTrue(!!dialog);
++      assertTrue(dialog.$.dialog.open);
++      assertEquals(0, handler.getCallCount('chooseLocalCustomBackground'));
++      assertEquals(0, handler.getCallCount('removeBackgroundImage'));
++      assertEquals(0, handler.getCallCount('setDefaultColor'));
++    });
++  }
++
++  test('third party theme link and reset remain available', async () => {
++    const theme = createTheme();
++    theme.thirdPartyThemeInfo = createThirdPartyThemeInfo('theme-id', 'Theme');
++    await setTheme(theme);
++    assertFalse(appearance.$.thirdPartyThemeLinkButton.hidden);
++    assertTrue(appearance.$.chromeColors.hidden);
++    assertTrue(appearance.$.followThemeToggle.hidden);
++    appearance.$.thirdPartyThemeLinkButton.click();
++    assertEquals('theme-id', await handler.whenCalled('openThirdPartyThemePage'));
++    assertFalse(appearance.$.setClassicChromeButton.hidden);
++  });
++
++  test('device theme toggle follows state and sends changes', async () => {
++    const theme = createTheme();
++    theme.followDeviceTheme = true;
++    await setTheme(theme);
++    assertFalse(appearance.$.followThemeToggle.hidden);
++    assertTrue(appearance.$.followThemeToggleControl.checked);
++    appearance.$.followThemeToggleControl.click();
++    assertFalse(await handler.whenCalled('setFollowDeviceTheme'));
++  });
++});

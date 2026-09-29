@@ -30,7 +30,8 @@ or mix dependency versions to make configuration pass.
    Reapply patches to confirm fixes survive a fresh build. Do not leave fixes
    only in the generated Chromium tree.
 3. For a source checkout containing Chromium's test data, apply
-   `docs/container-tabs-webui-tests.patch`. Build `browser_tests` and run
+   `docs/container-tabs-webui-tests.patch`, followed by
+   `docs/macos-development-webui-tests.patch`. Build `browser_tests` and run
    `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
    bookmark, history and settings WebUI checks.
    The small checkout also omits the non-Git test-font archive. Fetch the
@@ -47,16 +48,17 @@ or mix dependency versions to make configuration pass.
    explanation and file-by-file commit body. Record the final commit in the app
    archive name and build report.
 
-## Deliver to Mitsuha
+## Deliver with Taildrop
 
 Package the app as a DMG or a ZIP that preserves macOS bundle metadata and
 symlinks, for example with `ditto -c -k --sequesterRsrc --keepParent`. Include a
 SHA-256 checksum and a short report listing architecture, macOS deployment
 target, Xcode version, source revisions and test results.
 
-Discover Mitsuha in `tailscale status` and use Taildrop to send the archive,
-checksum and report to `mitsuha`. This build is for local development. Keep its
-profile separate from the user's regular browser data.
+Discover the requested recipient in `tailscale status` and use Taildrop to send
+the archive, checksum and report. The current requested recipient is Nausicaa,
+listed as `Nausicaä` / `nausica.tail7c7833.ts.net`. This build is for local
+development. Keep its profile separate from the user's regular browser data.
 
 ## Notifications
 
@@ -69,7 +71,7 @@ Send a notification when a build needs user action and after successful Taildrop
 delivery:
 
 ```sh
-pushover-cli send --title Codex 'Helium development build sent to Mitsuha'
+pushover-cli send --title Codex 'Helium development build sent to Nausicaa'
 ```
 
 Only send that completion message after the build and transfer succeed.
@@ -109,3 +111,31 @@ Xcode 27.0, build `27A266a`, and its Metal toolchain are installed on Katal.
 The build uses the macOS 27.0 SDK with a macOS 15.0 deployment target and a
 non-component arm64 configuration. A complete build and runtime validation
 are still required; successful patch application does not establish either.
+
+## Chromium 154 test fixture compatibility
+
+The full checkout's WebUI tests need a separate test-only compatibility patch,
+`docs/macos-development-webui-tests.patch`. Release archives omit these test
+sources, so this patch is deliberately outside `patches/series`.
+
+The patch fills in Helium's avatar, import, search-engine and system-settings
+interfaces in test doubles. Sync component tests import their types directly
+because Helium no longer re-exports them from `lazy_load.ts`. History tests use
+direct navigation for the synced-tabs route whose sidebar link was removed.
+Assertions for removed extension-store, sign-in and color-scheme controls now
+check their absence.
+
+The new-tab app and wallpaper-panel test registrations select Helium-specific
+suites. Chromium's original suites remain in the source checkout for reference,
+but their Google logo, search, AI, module and wallpaper-search controls are not
+in Helium's templates. The replacement suites check the retained shortcuts,
+customization preferences, background/attribution updates, local wallpaper
+selection, reset, device theme, third-party themes and managed-theme guards.
+Production and test TypeScript checking remain enabled.
+
+Compilation exposed two production inconsistencies: restored About-page update
+controls still had disabled type declarations, and the local wallpaper action
+did not check the managed-theme guard. Both fixes are in the normal patch series.
+The 37 modified container C++/Objective-C++ translation units and the WebUI test
+resources compile with the current Xcode toolchain. Runtime validation remains
+required.
