@@ -29,6 +29,10 @@ or mix dependency versions to make configuration pass.
    `docs/container-tabs-webui-tests.patch`. Build `browser_tests` and run
    `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
    bookmark, history and settings WebUI checks.
+   The small checkout also omits the non-Git test-font archive. Fetch the
+   `src/third_party/test_fonts/test_fonts` object specified in Chromium's
+   `DEPS`, verify its declared SHA-256 and size, and extract it into that exact
+   directory before building `browser_tests`. Do not substitute system fonts.
 4. Launch the built app with a separate development profile. Follow the UI and
    storage-isolation checks in `docs/container-tabs.md`. Record any check that
    could not run, rather than reporting it as passed.
