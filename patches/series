@@ -373,3 +373,6 @@ helium/core/container-tabs-popup-partition.patch
 helium/core/container-tabs-dialog-parent.patch
 helium/core/container-tabs-initial-partition.patch
 helium/core/container-tabs-menu-lifetime.patch
+
+helium/core/container-tabs-incognito.patch
+

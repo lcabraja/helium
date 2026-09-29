@@ -27,17 +27,47 @@ Links opened from a container inherit it. A regular new-tab command opens outsid
 containers unless **Select a container for each new tab** is enabled. A tab keeps
 its container across navigation, duplication, movement between windows,
 hibernation and session restoration. Container names appear in the tab label and
-an accent identifies the container even when a tab is pinned.
+a thin, rounded line at the top identifies the container even when a tab is
+pinned. It uses the same thickness as the tab-group underline.
 
 Origin-bound `blob:` and `filesystem:` URLs and JavaScript bookmarklets cannot be
 moved to another container. Reopening an unsupported target leaves the original
 tab open.
 
+## Incognito tabs
+
+Choose **New incognito tab** from the new-tab button's context menu, or
+**Incognito tab** in any container picker. Every new incognito tab gets its own
+in-memory cookies, local storage, IndexedDB, service workers and caches. Links
+opened in another tab and popups get fresh identities. **Duplicate** shares the
+original tab's identity. Navigating, moving or hibernating an existing tab keeps
+its identity.
+
+Closing the last related tab starts a five-minute grace period. Reopening it
+with Command+Shift+T during that period recovers its sessions. Reopening after
+expiry loads the URL with a fresh, empty identity. The browser keeps at most 25
+closed identities eligible for recovery, evicting the oldest first. Closing
+Helium ends all temporary identities immediately. They are never added to the
+saved container list.
+
+These tabs do not add page visits to normal history or persist their open and
+recently closed session entries. Saved tab groups retain blank placeholders
+instead of their private URLs. Bookmarks and downloaded files explicitly saved
+by the user remain. Profile settings and extensions are shared with ordinary
+tabs. This provides temporary, isolated site storage inside the same profile;
+it does not create a separate off-the-record profile for each tab.
+
+Expiry clears partition data and caches. Chromium retains the empty partition
+objects until the profile shuts down, so this does not promise that every byte
+of partition bookkeeping is freed exactly at five minutes.
+
 ## Management
 
 Open **Manage containers** from a container menu or Settings → Appearance. The
-manager provides names, colors, icons, creation, deletion, the enable switch and
-the new-tab picker preference. Container creation is unavailable in private or
+manager provides names, colors, seven monochrome icons, creation, deletion, the
+enable switch and the new-tab picker preference. It fits small lists and scrolls
+for larger lists, with a limit of 500 containers. Existing umbrella selections
+become dots without changing the container identity or its stored sessions. Container creation is unavailable in private or
 guest windows.
 
 Deleting a container asks to close its tabs and delete its site data. Pages with
@@ -178,3 +208,32 @@ This is a development build. The full upstream `browser_tests` target still
 fails to link fixtures for services removed by Helium, so the result is not full
 Chromium test coverage. Runtime checks used macOS 27.0; macOS 15.5 remains
 untested despite the audited deployment targets and bundle library paths.
+
+## Incognito tabs and UI validation on 30 September 2026
+
+The incognito lifecycle and UI updates are in
+`patches/helium/core/container-tabs-incognito.patch`. The app, chromedriver and
+focused test executable build with Xcode 27.0 on Katal. All 27 selected test
+executions pass, including 23 container executions, the two native new-tab menu
+regressions and the two appearance runners. The complete 379-patch common,
+platform and supplemental series applies without fuzz. Repository lint and the
+focused target's header dependency check pass.
+
+New regression cases cover independent cookies and site storage, duplicate
+sharing, the last-tab grace period, expiry cleanup and fresh restoration, links
+and popups, the closed-identity limit, hibernation, history exclusion, saved-group
+placeholders, legacy icons and the 500-container limit. The popup fixture watches
+inserted tabs instead of all internal WebContents, so speculative contents do
+not trigger a test-helper assertion.
+
+Native computer-use checks confirmed duplicate sharing, independent child tabs,
+restoration within the grace period, and empty cookies, local storage, IndexedDB,
+Cache Storage and service workers after a real five-minute expiry. The test URL
+was absent from the profile's history database after a clean exit. The app also
+handled 22 open tabs and eight repeated new-tab menu openings without crashing.
+
+The small manager fits its contents. A separate profile containing 500 containers
+scrolls to the final row and allows editing that row. The final icon picker has
+seven options, and a container's top line matches the tab-group underline's
+thickness and rounded ends. Native visual checks used the horizontal layout;
+the shared tab-view implementation receives the same drawing change.

@@ -1,0 +1,940 @@
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -641,0 +642 @@
++#define IDC_NEW_INCOGNITO_TAB 55008
+@@ -643 +644 @@
+-#define IDC_CONTAINER_LAST  55199
++#define IDC_CONTAINER_LAST  55599
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -20137 +20137 @@
+-    <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 100 containers.</message>
++    <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 500 containers.</message>
+@@ -20138,0 +20139,2 @@
++    <message name="IDS_CONTAINER_INCOGNITO" desc="Menu choice for a tab with its own temporary cookies and site data">Incognito tab</message>
++    <message name="IDS_CONTAINER_NEW_INCOGNITO" desc="New tab with its own temporary cookies and site data">New incognito tab</message>
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -79,0 +80 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -4361 +4362,3 @@
+-  *no_javascript_access = false;
++  *no_javascript_access =
++      helium::containers::IsIncognitoTab(web_contents) &&
++      disposition != WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+--- a/chrome/browser/containers/BUILD.gn
++++ b/chrome/browser/containers/BUILD.gn
+@@ -8,0 +9 @@
++    "incognito_container_service.cc",
+@@ -33,0 +35,4 @@
++    "//chrome/browser/history",
++    "//chrome/browser/ui/tabs/saved_tab_groups",
++    "//components/history/core/browser",
++    "//components/saved_tab_groups/public",
+--- a/chrome/browser/containers/container_browsertest.cc
++++ b/chrome/browser/containers/container_browsertest.cc
+@@ -10,0 +11 @@
++#include "base/task/cancelable_task_tracker.h"
+@@ -13,0 +15 @@
++#include "base/uuid.h"
+@@ -14,0 +17 @@
++#include "chrome/browser/history/history_service_factory.h"
+@@ -22,0 +26 @@
++#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+@@ -23,0 +28 @@
++#include "chrome/common/webui_url_constants.h"
+@@ -25,0 +31 @@
++#include "components/history/core/browser/history_service.h"
+@@ -26,0 +33 @@
++#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+@@ -75,0 +83,18 @@
++  }
++
++  content::WebContents* OpenIncognito() {
++    EXPECT_TRUE(OpenInContainer(browser(),
++                                {embedded_test_server()->GetURL("/test")},
++                                kNewIncognitoContainer));
++    auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
++    EXPECT_TRUE(content::WaitForLoadStop(tab));
++    EXPECT_TRUE(IsIncognitoTab(tab));
++    return tab;
++  }
++
++  void CloseActive() {
++    auto* model = browser()->tab_strip_model();
++    model->CloseWebContentsAt(model->active_index(),
++                              TabCloseTypes::CLOSE_USER_GESTURE |
++                                  TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
++    content::RunAllTasksUntilIdle();
+@@ -478,0 +504,240 @@
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, IncognitoStorageAndDuplicates) {
++  auto* original = OpenIncognito();
++  const auto id = GetContainerId(original);
++  auto* partition = original->GetPrimaryMainFrame()->GetStoragePartition();
++  EXPECT_TRUE(partition->GetConfig().in_memory());
++  ASSERT_TRUE(content::ExecJs(original, R"(
++    (async () => {
++      document.cookie = 'private=yes; max-age=3600; path=/';
++      localStorage.setItem('private', 'yes');
++      sessionStorage.setItem('private', 'yes');
++      await new Promise((resolve, reject) => {
++        const request = indexedDB.open('private', 1);
++        request.onupgradeneeded = () => request.result.createObjectStore('data');
++        request.onsuccess = () => { request.result.close(); resolve(); };
++        request.onerror = reject;
++      });
++      await caches.open('private');
++      await navigator.serviceWorker.register('/container-worker.js');
++      await navigator.serviceWorker.ready;
++    })()
++  )"));
++  chrome::DuplicateTab(browser());
++  auto* model = browser()->tab_strip_model();
++  auto* duplicate = model->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(duplicate));
++  EXPECT_EQ(id, GetContainerId(duplicate));
++  EXPECT_EQ(partition, duplicate->GetPrimaryMainFrame()->GetStoragePartition());
++  EXPECT_EQ("private=yes", content::EvalJs(duplicate, "document.cookie"));
++  EXPECT_EQ("yes",
++            content::EvalJs(duplicate, "sessionStorage.getItem('private')"));
++  auto* separate = OpenIncognito();
++  EXPECT_NE(id, GetContainerId(separate));
++  for (auto* tab : {separate, Open(Personal()), Open("")}) {
++    EXPECT_EQ("", content::EvalJs(tab, "document.cookie"));
++    EXPECT_EQ(true,
++              content::EvalJs(tab, "localStorage.getItem('private') === null"));
++    EXPECT_EQ(true, content::EvalJs(
++                        tab, "sessionStorage.getItem('private') === null"));
++    EXPECT_EQ(0,
++              content::EvalJs(
++                  tab, "(async () => (await indexedDB.databases()).length)()"));
++    EXPECT_EQ(0, content::EvalJs(
++                     tab, "(async () => (await caches.keys()).length)()"));
++    EXPECT_EQ(0, content::EvalJs(
++                     tab,
++                     "(async () => (await "
++                     "navigator.serviceWorker.getRegistrations()).length)()"));
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       IncognitoFiveMinuteRestoreAndExpiry) {
++  auto* original = OpenIncognito();
++  auto* profile = browser()->GetProfile();
++  const auto id = GetContainerId(original);
++  ASSERT_TRUE(content::ExecJs(original,
++                              "document.cookie = 'private=yes; path=/';"
++                              "localStorage.setItem('private','yes');"
++                              "sessionStorage.setItem('private','yes')"));
++  chrome::DuplicateTab(browser());
++  ASSERT_TRUE(content::WaitForLoadStop(
++      browser()->tab_strip_model()->GetActiveWebContents()));
++  CloseActive();
++  // Closing a duplicate does not start the timer while its sibling is open.
++  ExpireIncognitoContainersForTesting(profile,
++                                      base::TimeTicks::Now() + base::Hours(1));
++  EXPECT_TRUE(IsIncognitoContainerAvailable(profile, id));
++  EXPECT_FALSE(CookieKeys(id).empty());
++  auto* model = browser()->tab_strip_model();
++  model->ActivateTabAt(model->GetIndexOfWebContents(original));
++  CloseActive();
++  ExpireIncognitoContainersForTesting(
++      profile, base::TimeTicks::Now() + base::Minutes(4));
++  EXPECT_TRUE(IsIncognitoContainerAvailable(profile, id));
++  chrome::RestoreTab(browser());
++  auto* restored = model->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(restored));
++  EXPECT_EQ(id, GetContainerId(restored));
++  EXPECT_EQ("private=yes", content::EvalJs(restored, "document.cookie"));
++  EXPECT_EQ("yes",
++            content::EvalJs(restored, "localStorage.getItem('private')"));
++  EXPECT_EQ("yes",
++            content::EvalJs(restored, "sessionStorage.getItem('private')"));
++  CloseActive();
++  ExpireIncognitoContainersForTesting(
++      profile,
++      base::TimeTicks::Now() + kIncognitoRestoreGrace + base::Seconds(1));
++  EXPECT_FALSE(IsIncognitoContainerAvailable(profile, id));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return !HasIncognitoCleanupPendingForTesting(profile); }));
++  EXPECT_TRUE(CookieKeys(id).empty());
++  chrome::RestoreTab(browser());
++  restored = model->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(restored));
++  EXPECT_TRUE(IsIncognitoTab(restored));
++  EXPECT_NE(id, GetContainerId(restored));
++  EXPECT_EQ("", content::EvalJs(restored, "document.cookie"));
++  EXPECT_EQ(true, content::EvalJs(restored,
++                                  "localStorage.getItem('private') === null"));
++  EXPECT_EQ(true, content::EvalJs(
++                      restored, "sessionStorage.getItem('private') === null"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       IncognitoLinksAndPopupsAreIndependent) {
++  auto* source = OpenIncognito();
++  const auto id = GetContainerId(source);
++  ASSERT_TRUE(content::ExecJs(source,
++                              "document.cookie = 'private=yes; path=/';"
++                              "localStorage.setItem('private','yes');"
++                              "sessionStorage.setItem('private','yes')"));
++  std::set<std::string> identities{id};
++  for (const char* script :
++       {"window.open('/popup', '_blank');",
++        "window.open('/popup', '_blank', 'noopener');",
++        "const link = document.createElement('a');"
++        "link.href = '/linked-tab'; link.target = '_blank';"
++        "document.body.appendChild(link); link.click();"}) {
++    ui_test_utils::AllBrowserTabAddedWaiter observer(/*expected_count=*/1);
++    ASSERT_TRUE(content::ExecJs(source, script));
++    auto* popup = observer.Wait();
++    ASSERT_TRUE(popup);
++    ASSERT_TRUE(content::WaitForLoadStop(popup));
++    EXPECT_TRUE(IsIncognitoTab(popup));
++    EXPECT_TRUE(identities.insert(GetContainerId(popup)).second);
++    EXPECT_EQ("", content::EvalJs(popup, "document.cookie"));
++    EXPECT_EQ(true, content::EvalJs(
++                        popup, "localStorage.getItem('private') === null"));
++    EXPECT_EQ(true, content::EvalJs(
++                        popup, "sessionStorage.getItem('private') === null"));
++    EXPECT_EQ(true, content::EvalJs(popup, "window.opener === null"));
++  }
++  NavigateParams params(browser(), embedded_test_server()->GetURL("/child"),
++                        ui::PAGE_TRANSITION_LINK);
++  params.source_contents = source;
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++  auto* child = browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(child));
++  EXPECT_TRUE(IsIncognitoTab(child));
++  EXPECT_TRUE(identities.insert(GetContainerId(child)).second);
++  EXPECT_EQ("", content::EvalJs(child, "document.cookie"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, IncognitoClosedJarLimit) {
++  auto* profile = browser()->GetProfile();
++  auto* active = OpenIncognito();
++  const auto active_id = GetContainerId(active);
++  ASSERT_TRUE(
++      content::ExecJs(active, "document.cookie = 'active=yes; path=/'"));
++  const auto first_closed = GetContainerId(OpenIncognito());
++  CloseActive();
++  std::string last_closed;
++  for (int i = 0; i < 25; ++i) {
++    last_closed = GetContainerId(OpenIncognito());
++    CloseActive();
++  }
++  EXPECT_FALSE(IsIncognitoContainerAvailable(profile, first_closed));
++  EXPECT_TRUE(IsIncognitoContainerAvailable(profile, last_closed));
++  EXPECT_TRUE(IsIncognitoContainerAvailable(profile, active_id));
++  EXPECT_EQ("active=yes", content::EvalJs(active, "document.cookie"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, IncognitoHibernateKeepsPartition) {
++  auto* work = OpenIncognito();
++  const auto id = GetContainerId(work);
++  auto* model = browser()->tab_strip_model();
++  const int index = model->GetIndexOfWebContents(work);
++  // Reload on activation requires a focused browser, even on a test runner
++  // whose native window is not frontmost.
++  auto focused_model = resource_coordinator::GetTabLifecycleUnitSource()
++                           ->SetFocusedTabStripModelForTesting(model);
++  auto* partition = work->GetPrimaryMainFrame()->GetStoragePartition();
++  ASSERT_TRUE(content::ExecJs(work, "localStorage.setItem('account', 'work')"));
++  Open({});
++  auto* lifecycle =
++      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(work);
++  ASSERT_TRUE(lifecycle);
++  ASSERT_TRUE(
++      lifecycle->DiscardTab(mojom::LifecycleUnitDiscardReason::EXTERNAL));
++  ExpireIncognitoContainersForTesting(browser()->GetProfile(),
++                                      base::TimeTicks::Now() + base::Hours(1));
++  EXPECT_TRUE(IsIncognitoContainerAvailable(browser()->GetProfile(), id));
++  EXPECT_EQ(id, GetContainerId(model->GetWebContentsAt(index)));
++  content::TestNavigationObserver resumed(model->GetWebContentsAt(index));
++  model->ActivateTabAt(index);
++  resumed.Wait();
++  ASSERT_TRUE(resumed.last_navigation_succeeded());
++  EXPECT_EQ(partition, model->GetWebContentsAt(index)
++                           ->GetPrimaryMainFrame()
++                           ->GetStoragePartition());
++  EXPECT_EQ("work", content::EvalJs(model->GetWebContentsAt(index),
++                                    "localStorage.getItem('account')"));
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       IncognitoHistoryAndSavedGroupPlaceholder) {
++  auto* tab = OpenIncognito();
++  const auto private_url =
++      embedded_test_server()->GetURL("/private-history-check");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), private_url));
++  const auto saved =
++      tab_groups::SavedTabGroupUtils::CreateSavedTabGroupTabFromWebContents(
++          tab, base::Uuid::GenerateRandomV4());
++  EXPECT_EQ(GURL(chrome::kChromeUINewTabURL), saved.url());
++  EXPECT_TRUE(saved.title().empty());
++  const auto ordinary_url =
++      embedded_test_server()->GetURL("/ordinary-history-check");
++  Open("");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), ordinary_url));
++  auto* history = HistoryServiceFactory::GetForProfile(
++      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
++  ASSERT_TRUE(history);
++  base::CancelableTaskTracker tracker;
++  base::test::TestFuture<history::QueryURLResult> normal_result;
++  history->QueryURL(ordinary_url, normal_result.GetCallback(), &tracker);
++  EXPECT_TRUE(normal_result.Get().success);
++  base::test::TestFuture<history::QueryURLResult> private_result;
++  history->QueryURL(private_url, private_result.GetCallback(), &tracker);
++  EXPECT_FALSE(private_result.Get().success);
++}
++
++IN_PROC_BROWSER_TEST_F(ContainerBrowserTest,
++                       LegacyIconAndFiveHundredContainers) {
++  auto* profile = browser()->GetProfile();
++  const auto personal = Personal();
++  auto list = profile->GetPrefs()->GetList(kContainersPref).Clone();
++  list[0].GetDict().Set("icon", 7);
++  profile->GetPrefs()->SetList(kContainersPref, std::move(list));
++  ASSERT_TRUE(FindContainer(profile, personal));
++  EXPECT_EQ(0, FindContainer(profile, personal)->icon);
++  EXPECT_FALSE(SaveContainer(profile, {}, u"Umbrella", 0, 7));
++  for (size_t i = GetContainers(profile).size(); i < 500; ++i) {
++    ASSERT_TRUE(SaveContainer(profile, {}, u"Space", i % 8, i % 7));
++  }
++  EXPECT_EQ(500u, GetContainers(profile).size());
++  EXPECT_FALSE(SaveContainer(profile, {}, u"Overflow", 0, 0));
++  EXPECT_TRUE(SaveContainer(profile, personal, u"Renamed at capacity", 0, 0));
++}
++
+--- a/chrome/browser/containers/container_service.cc
++++ b/chrome/browser/containers/container_service.cc
+@@ -89 +89 @@
+-        *icon < 0 || *icon >= static_cast<int>(kIconCount)) {
++        *icon < 0 || *icon > static_cast<int>(kIconCount)) {
+@@ -92 +92,3 @@
+-    containers.push_back({*id, base::UTF8ToUTF16(*name), *color, *icon});
++    // The retired umbrella icon keeps its identity and falls back to a dot.
++    containers.push_back({*id, base::UTF8ToUTF16(*name), *color,
++                          *icon < static_cast<int>(kIconCount) ? *icon : 0});
+@@ -173 +175 @@
+-      u"●", u"▣", u"◆", u"◈", u"★", u"✿", u"▲", u"☂"};
++      u"●", u"▣", u"◆", u"◈", u"★", u"✿", u"▲"};
+@@ -189 +191 @@
+-  CHECK(IsValidId(id));
++  CHECK(IsValidId(id) || IsIncognitoContainerId(id));
+@@ -200 +202,7 @@
+-      IsValidId(id) ? id : base::Uuid::GenerateRandomV4().AsLowercaseString();
++      IsIncognitoContainerId(id)
++          ? (IsIncognitoContainerAvailable(profile, id)
++                 ? id
++                 : CreateIncognitoContainer(profile))
++          : (IsValidId(id)
++                 ? id
++                 : base::Uuid::GenerateRandomV4().AsLowercaseString());
+--- a/chrome/browser/containers/container_service.h
++++ b/chrome/browser/containers/container_service.h
+@@ -12,0 +13 @@
++#include "base/time/time.h"
+@@ -31 +32 @@
+-inline constexpr size_t kMaxContainers = 100;
++inline constexpr size_t kMaxContainers = 500;
+@@ -33 +34,14 @@
+-inline constexpr size_t kIconCount = 8;
++inline constexpr size_t kIconCount = 7;
++
++// Each explicitly opened incognito tab receives a new memory-only identity.
++// Only clones share one; the last close starts a five-minute restore grace.
++inline constexpr char kNewIncognitoContainer[] = "incognito";
++inline constexpr char kIncognitoPrefix[] = "incognito-";
++inline constexpr base::TimeDelta kIncognitoRestoreGrace = base::Minutes(5);
++bool IsIncognitoContainerId(const std::string& id);
++bool IsIncognitoTab(content::WebContents* contents);
++std::string CreateIncognitoContainer(Profile* profile);
++bool IsIncognitoContainerAvailable(Profile* profile, const std::string& id);
++void TrackIncognitoTab(content::WebContents* contents);
++void ExpireIncognitoContainersForTesting(Profile* profile, base::TimeTicks now);
++bool HasIncognitoCleanupPendingForTesting(Profile* profile);
+--- /dev/null
++++ b/chrome/browser/containers/incognito_container_service.cc
+@@ -0,0 +1,240 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include <algorithm>
++#include <map>
++#include <memory>
++#include <string_view>
++
++#include "base/barrier_closure.h"
++#include "base/check.h"
++#include "base/check_op.h"
++#include "base/functional/bind.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/supports_user_data.h"
++#include "base/timer/timer.h"
++#include "base/uuid.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "services/network/public/mojom/clear_data_filter.mojom.h"
++#include "services/network/public/mojom/network_context.mojom.h"
++#include "third_party/blink/public/common/storage_key/storage_key.h"
++
++namespace helium::containers {
++namespace {
++
++const char kIncognitoStateKey[] = "helium.incognito_state";
++const char kIncognitoLeaseKey[] = "helium.incognito_lease";
++// Match the order of magnitude of Chromium's 25-entry closed-tab buffer.
++constexpr int kMaxClosedJars = 25;
++
++class IncognitoState : public base::SupportsUserData::Data {
++ public:
++  explicit IncognitoState(Profile* profile) : profile_(profile) {}
++
++  static IncognitoState* Get(Profile* profile) {
++    auto* state =
++        static_cast<IncognitoState*>(profile->GetUserData(&kIncognitoStateKey));
++    if (!state) {
++      auto owned = std::make_unique<IncognitoState>(profile);
++      state = owned.get();
++      profile->SetUserData(&kIncognitoStateKey, std::move(owned));
++    }
++    return state;
++  }
++
++  std::string Create() {
++    const std::string id = std::string(kIncognitoPrefix) +
++                           base::Uuid::GenerateRandomV4().AsLowercaseString();
++    entries_[id].expires = base::TimeTicks::Now() + kIncognitoRestoreGrace;
++    EnforceClosedLimit();
++    ScheduleExpiry();
++    return id;
++  }
++
++  bool Available(const std::string& id) {
++    Expire(base::TimeTicks::Now());
++    return entries_.contains(id);
++  }
++
++  void Acquire(const std::string& id) {
++    // Renderer-created, isolated popup partitions arrive here without Create().
++    auto& entry = entries_[id];
++    ++entry.tabs;
++    entry.expires = base::TimeTicks();
++    ScheduleExpiry();
++  }
++
++  void Release(const std::string& id) {
++    auto it = entries_.find(id);
++    CHECK(it != entries_.end());
++    CHECK_GT(it->second.tabs, 0u);
++    if (--it->second.tabs == 0) {
++      it->second.expires = base::TimeTicks::Now() + kIncognitoRestoreGrace;
++      EnforceClosedLimit();
++      ScheduleExpiry();
++    }
++  }
++
++  void Expire(base::TimeTicks now) {
++    for (auto it = entries_.begin(); it != entries_.end();) {
++      if (it->second.tabs == 0 && it->second.expires <= now) {
++        const std::string id = it->first;
++        it = entries_.erase(it);
++        EraseData(id);
++      } else {
++        ++it;
++      }
++    }
++    ScheduleExpiry();
++  }
++
++  bool cleanup_pending() const { return cleanup_pending_ != 0; }
++  base::WeakPtr<IncognitoState> GetWeakPtr() {
++    return weak_factory_.GetWeakPtr();
++  }
++
++ private:
++  struct Entry {
++    size_t tabs = 0;
++    base::TimeTicks expires;
++  };
++
++  void EnforceClosedLimit() {
++    while (std::ranges::count_if(entries_, [](const auto& item) {
++             return item.second.tabs == 0;
++           }) > kMaxClosedJars) {
++      auto oldest = entries_.end();
++      for (auto it = entries_.begin(); it != entries_.end(); ++it) {
++        if (it->second.tabs == 0 &&
++            (oldest == entries_.end() ||
++             it->second.expires < oldest->second.expires)) {
++          oldest = it;
++        }
++      }
++      const std::string id = oldest->first;
++      entries_.erase(oldest);
++      EraseData(id);
++    }
++  }
++
++  void ScheduleExpiry() {
++    expiry_timer_.Stop();
++    auto next = base::TimeTicks::Max();
++    for (const auto& [id, entry] : entries_) {
++      if (entry.tabs == 0) {
++        next = std::min(next, entry.expires);
++      }
++    }
++    if (next != base::TimeTicks::Max()) {
++      expiry_timer_.Start(
++          FROM_HERE, std::max(base::TimeDelta(), next - base::TimeTicks::Now()),
++          base::BindOnce(
++              [](base::WeakPtr<IncognitoState> state) {
++                if (state) {
++                  state->Expire(base::TimeTicks::Now());
++                }
++              },
++              weak_factory_.GetWeakPtr()));
++    }
++  }
++
++  void EraseData(const std::string& id) {
++    auto* partition = profile_->GetStoragePartition(
++        GetPartitionConfig(profile_, id), /*can_create=*/false);
++    if (!partition) {
++      return;
++    }
++    ++cleanup_pending_;
++    auto done =
++        base::BarrierClosure(3, base::BindOnce(
++                                    [](base::WeakPtr<IncognitoState> state) {
++                                      if (state) {
++                                        --state->cleanup_pending_;
++                                      }
++                                    },
++                                    weak_factory_.GetWeakPtr()));
++    // SessionStorage may still be referenced by a recently-closed entry. Clear
++    // the partition itself, not just its cookies or the UI's identity record.
++    partition->GetNetworkContext()->ClearHttpCache(
++        base::Time(), base::Time::Max(), nullptr, done);
++    partition->GetNetworkContext()->ClearHttpAuthCache(
++        base::Time(), base::Time::Max(), nullptr, done);
++    partition->ClearData(content::StoragePartition::REMOVE_DATA_MASK_ALL,
++                         blink::StorageKey(), base::Time(), base::Time::Max(),
++                         done);
++  }
++
++  raw_ptr<Profile> profile_;
++  std::map<std::string, Entry> entries_;
++  size_t cleanup_pending_ = 0;
++  base::OneShotTimer expiry_timer_;
++  base::WeakPtrFactory<IncognitoState> weak_factory_{this};
++};
++
++class IncognitoLease : public base::SupportsUserData::Data {
++ public:
++  IncognitoLease(IncognitoState* state, std::string id)
++      : state_(state->GetWeakPtr()), id_(std::move(id)) {
++    state->Acquire(id_);
++  }
++  ~IncognitoLease() override {
++    if (state_) {
++      state_->Release(id_);
++    }
++  }
++
++ private:
++  base::WeakPtr<IncognitoState> state_;
++  std::string id_;
++};
++
++}  // namespace
++
++bool IsIncognitoContainerId(const std::string& id) {
++  return id.starts_with(kIncognitoPrefix) &&
++         base::Uuid::ParseLowercase(
++             std::string_view(id).substr(sizeof(kIncognitoPrefix) - 1))
++             .is_valid();
++}
++
++bool IsIncognitoTab(content::WebContents* contents) {
++  return IsIncognitoContainerId(GetContainerId(contents));
++}
++
++std::string CreateIncognitoContainer(Profile* profile) {
++  return IncognitoState::Get(profile)->Create();
++}
++
++bool IsIncognitoContainerAvailable(Profile* profile, const std::string& id) {
++  return IsIncognitoContainerId(id) &&
++         IncognitoState::Get(profile)->Available(id);
++}
++
++void TrackIncognitoTab(content::WebContents* contents) {
++  if (!contents || contents->GetUserData(&kIncognitoLeaseKey)) {
++    return;
++  }
++  const auto id = GetContainerId(contents);
++  if (IsIncognitoContainerId(id)) {
++    auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++    contents->SetUserData(
++        &kIncognitoLeaseKey,
++        std::make_unique<IncognitoLease>(IncognitoState::Get(profile), id));
++  }
++}
++
++void ExpireIncognitoContainersForTesting(Profile* profile,
++                                         base::TimeTicks now) {
++  IncognitoState::Get(profile)->Expire(now);
++}
++
++bool HasIncognitoCleanupPendingForTesting(Profile* profile) {
++  return IncognitoState::Get(profile)->cleanup_pending();
++}
++
++}  // namespace helium::containers
+--- a/chrome/browser/favicon/BUILD.gn
++++ b/chrome/browser/favicon/BUILD.gn
+@@ -34,0 +35 @@
++    "//chrome/browser/containers",
+--- a/chrome/browser/favicon/favicon_utils.cc
++++ b/chrome/browser/favicon/favicon_utils.cc
+@@ -8,0 +9 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -82,2 +83,4 @@
+-      FaviconServiceFactory::GetForProfile(original_profile,
+-                                           ServiceAccessType::IMPLICIT_ACCESS));
++      helium::containers::IsIncognitoTab(web_contents)
++          ? nullptr
++          : FaviconServiceFactory::GetForProfile(
++                original_profile, ServiceAccessType::IMPLICIT_ACCESS));
+--- a/chrome/browser/history/BUILD.gn
++++ b/chrome/browser/history/BUILD.gn
+@@ -47,0 +48 @@
++    "//chrome/browser/containers",
+--- a/chrome/browser/history/history_tab_helper.cc
++++ b/chrome/browser/history/history_tab_helper.cc
+@@ -14,0 +15 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -647 +648,2 @@
+-  if (profile->IsOffTheRecord()) {
++  if (profile->IsOffTheRecord() ||
++      helium::containers::IsIncognitoTab(web_contents())) {
+--- a/chrome/browser/password_manager/BUILD.gn
++++ b/chrome/browser/password_manager/BUILD.gn
+@@ -153,0 +154 @@
++    "//chrome/browser/containers",
+--- a/chrome/browser/password_manager/chrome_password_manager_client.cc
++++ b/chrome/browser/password_manager/chrome_password_manager_client.cc
+@@ -33,0 +34 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -1136 +1137,2 @@
+-  return web_contents()->GetBrowserContext()->IsOffTheRecord();
++  return web_contents()->GetBrowserContext()->IsOffTheRecord() ||
++         helium::containers::IsIncognitoTab(web_contents());
+--- a/chrome/browser/sessions/chrome_tab_restore_service_client.cc
++++ b/chrome/browser/sessions/chrome_tab_restore_service_client.cc
+@@ -7,0 +8 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -93,0 +95,7 @@
++bool ChromeTabRestoreServiceClient::ShouldPersistTab(
++    const std::map<std::string, std::string>& extra_data) {
++  const auto it = extra_data.find(helium::containers::kSessionKey);
++  return it == extra_data.end() ||
++         !helium::containers::IsIncognitoContainerId(it->second);
++}
++
+--- a/chrome/browser/sessions/chrome_tab_restore_service_client.h
++++ b/chrome/browser/sessions/chrome_tab_restore_service_client.h
+@@ -43,0 +44,2 @@
++  bool ShouldPersistTab(
++      const std::map<std::string, std::string>& extra_data) override;
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -283,0 +284,3 @@
++  if (helium::containers::IsIncognitoTab(contents)) {
++    return;
++  }
+@@ -622,0 +626,3 @@
++  if (helium::containers::IsIncognitoTab(tab)) {
++    return;
++  }
+--- a/chrome/browser/sessions/session_tab_helper_factory.cc
++++ b/chrome/browser/sessions/session_tab_helper_factory.cc
+@@ -4,0 +5,3 @@
++#include "chrome/browser/buildflags.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/common/buildflags.h"
+@@ -6,3 +8,0 @@
+-
+-#include "chrome/browser/buildflags.h"
+-#include "chrome/common/buildflags.h"
+@@ -28,0 +29,3 @@
++  if (helium::containers::IsIncognitoTab(web_contents)) {
++    return nullptr;
++  }
+--- a/chrome/browser/ui/autofill/BUILD.gn
++++ b/chrome/browser/ui/autofill/BUILD.gn
+@@ -188,0 +189 @@
++    "//chrome/browser/containers",
+--- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
++++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+@@ -51,0 +52 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -431 +432,2 @@
+-  return mutable_this->web_contents()->GetBrowserContext()->IsOffTheRecord();
++  return mutable_this->web_contents()->GetBrowserContext()->IsOffTheRecord() ||
++         helium::containers::IsIncognitoTab(mutable_this->web_contents());
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -85,2 +85,4 @@
+-        helium::containers::FindContainer(browser->GetProfile(),
+-                                          container->second)) {
++        (helium::containers::FindContainer(browser->GetProfile(),
++                                           container->second) ||
++         helium::containers::IsIncognitoContainerAvailable(
++             browser->GetProfile(), container->second))) {
+--- a/chrome/browser/ui/containers/container_ui.cc
++++ b/chrome/browser/ui/containers/container_ui.cc
+@@ -43,0 +44 @@
++#include "ui/views/window/non_client_view.h"
+@@ -160,3 +161,5 @@
+-  auto* icon = AddCombo(contents, IDS_CONTAINER_ICON,
+-                        {GetIcon(0), GetIcon(1), GetIcon(2), GetIcon(3),
+-                         GetIcon(4), GetIcon(5), GetIcon(6), GetIcon(7)},
++  std::vector<std::u16string> icons;
++  for (size_t i = 0; i < kIconCount; ++i) {
++    icons.push_back(GetIcon(i));
++  }
++  auto* icon = AddCombo(contents, IDS_CONTAINER_ICON, std::move(icons),
+@@ -236 +238,0 @@
+-    SetPreferredSize(gfx::Size(480, 520));
+@@ -279,0 +282,7 @@
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    auto preferred = views::View::CalculatePreferredSize(available_size);
++    preferred.set_width(480);
++    return preferred;
++  }
++
+@@ -321,0 +331,3 @@
++    if (GetWidget()) {
++      GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
++    }
+@@ -398,0 +411 @@
++    AddItem(IDC_NEW_INCOGNITO_TAB, Text(IDS_CONTAINER_INCOGNITO));
+@@ -425 +438,3 @@
+-    if (command_id != IDC_CONTAINER_DEFAULT) {
++    if (command_id == IDC_NEW_INCOGNITO_TAB) {
++      id = kNewIncognitoContainer;
++    } else if (command_id != IDC_CONTAINER_DEFAULT) {
+@@ -484 +499,2 @@
+-                       !FindContainer(browser->GetProfile(), id)))) {
++                       (id != kNewIncognitoContainer &&
++                        !FindContainer(browser->GetProfile(), id))))) {
+@@ -499 +515,3 @@
+-    params.container_id = id;
++    params.container_id = id == kNewIncognitoContainer
++                              ? CreateIncognitoContainer(browser->GetProfile())
++                              : id;
+@@ -523 +541,2 @@
+-  std::vector<std::u16string> choices = {Text(IDS_CONTAINER_NONE)};
++  std::vector<std::u16string> choices = {Text(IDS_CONTAINER_NONE),
++                                         Text(IDS_CONTAINER_INCOGNITO)};
+@@ -528 +547 @@
+-                         containers.empty() ? 0 : 1);
++                         containers.empty() ? 0 : 2);
+@@ -535,3 +554,4 @@
+-          OpenInContainer(
+-              browser.get(), urls,
+-              index == 0 ? std::string() : containers[index - 1].id);
++          OpenInContainer(browser.get(), urls,
++                          index == 0   ? std::string()
++                          : index == 1 ? kNewIncognitoContainer
++                                       : containers[index - 2].id);
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -766,0 +767,15 @@
++  if (!params->container_id.has_value()) {
++    params->container_id =
++        helium::containers::GetContainerId(params->source_contents);
++    if (params->opener) {
++      params->container_id = helium::containers::GetContainerId(
++          content::WebContents::FromRenderFrameHost(params->opener));
++    }
++    if (helium::containers::IsIncognitoContainerId(*params->container_id) &&
++        params->disposition != WindowOpenDisposition::CURRENT_TAB &&
++        !params->contents_to_insert && params->browser) {
++      params->container_id = helium::containers::CreateIncognitoContainer(
++          params->browser->GetProfile());
++    }
++  }
++
+@@ -792,9 +806,0 @@
+-    }
+-  }
+-
+-  if (!params->container_id.has_value()) {
+-    params->container_id =
+-        helium::containers::GetContainerId(params->source_contents);
+-    if (params->opener) {
+-      params->container_id = helium::containers::GetContainerId(
+-          content::WebContents::FromRenderFrameHost(params->opener));
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -25,0 +26 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -324,0 +326,2 @@
++  helium::containers::TrackIncognitoTab(web_contents);
++
+--- a/chrome/browser/ui/tabs/saved_tab_groups/BUILD.gn
++++ b/chrome/browser/ui/tabs/saved_tab_groups/BUILD.gn
+@@ -85,0 +86 @@
++    "//chrome/browser/containers",
+--- a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.cc
++++ b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.cc
+@@ -17,0 +18 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -480,0 +482,4 @@
++  if (helium::containers::IsIncognitoTab(contents)) {
++    return SavedTabGroupTab(GURL(chrome::kChromeUINewTabURL), std::u16string(),
++                            saved_tab_group_id, /*position=*/std::nullopt);
++  }
+--- a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.cc
++++ b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.cc
+@@ -8,0 +9 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -171,0 +173,3 @@
++  if (helium::containers::IsIncognitoTab(contents())) {
++    return;
++  }
+@@ -231,0 +236,3 @@
++  if (helium::containers::IsIncognitoTab(contents())) {
++    return;
++  }
+--- a/chrome/browser/ui/tabs/tab_data.cc
++++ b/chrome/browser/ui/tabs/tab_data.cc
+@@ -49 +49,3 @@
+-    const auto name = container
++    const auto name = helium::containers::IsIncognitoContainerId(container_id)
++                          ? l10n_util::GetStringUTF16(IDS_CONTAINER_INCOGNITO)
++                      : container
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -763,2 +763,7 @@
+-    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
+-                     *tab_data_.container_color);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(*tab_data_.container_color);
++    const int overlap = TabStyle::Get()->GetTabOverlap();
++    canvas->DrawRoundRect(
++        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
++        1, flags);
+--- a/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
++++ b/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
+@@ -11,0 +12 @@
++#include "chrome/browser/containers/container_service.h"
+@@ -40,0 +42,3 @@
++    AddItemWithStringId(IDC_NEW_INCOGNITO_TAB, IDS_CONTAINER_NEW_INCOGNITO);
++    SetEnabledAt(GetIndexOfCommandId(IDC_NEW_INCOGNITO_TAB).value(),
++                 helium::containers::IsEnabled(browser_->GetProfile()));
+@@ -60,0 +65,6 @@
++
++  if (command_id == IDC_NEW_INCOGNITO_TAB) {
++    helium::containers::OpenInContainer(
++        browser_, {}, helium::containers::kNewIncognitoContainer);
++    return;
++  }
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -900,2 +900,7 @@
+-    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
+-                     *data_.container_color);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(*data_.container_color);
++    const int overlap = TabStyle::Get()->GetTabOverlap();
++    canvas->DrawRoundRect(
++        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
++        1, flags);
+--- a/components/sessions/core/tab_restore_service_client.h
++++ b/components/sessions/core/tab_restore_service_client.h
+@@ -74,0 +75,7 @@
++  // Whether a closed tab's metadata may be persisted to disk. Memory-only
++  // entries remain available to the in-process reopen buffer.
++  virtual bool ShouldPersistTab(
++      const std::map<std::string, std::string>& extra_data) {
++    return true;
++  }
++
+--- a/components/sessions/core/tab_restore_service_impl.cc
++++ b/components/sessions/core/tab_restore_service_impl.cc
+@@ -957,0 +958,7 @@
++  const size_t persistable_tabs =
++      std::ranges::count_if(group.tabs, [this](const auto& tab) {
++        return GetSelectedNavigationIndexToPersist(*tab) != -1;
++      });
++  if (persistable_tabs == 0) {
++    return;
++  }
+@@ -959 +966 @@
+-      group.id, group.tabs.size(), group.group_id, group.saved_group_id,
++      group.id, persistable_tabs, group.group_id, group.saved_group_id,
+@@ -1211,0 +1219,3 @@
++  if (!client_->ShouldPersistTab(tab.extra_data)) {
++    return -1;
++  }
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5634,0 +5635,8 @@
++  // Helium's temporary tab identities are independent for new windows/tabs.
++  // Cloning is handled separately by Clone(), which intentionally shares one.
++  const bool independent_incognito =
++      partition_config.partition_domain() == "helium-containers" &&
++      partition_config.partition_name().starts_with("incognito-") &&
++      params.disposition != WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
++  const bool suppress_opener =
++      params.opener_suppressed || independent_incognito;
+@@ -5683 +5691,8 @@
+-  if (params.opener_suppressed) {
++  if (independent_incognito) {
++    site_instance = SiteInstance::CreateForFixedStoragePartition(
++        GetBrowserContext(), params.target_url,
++        StoragePartitionConfig::Create(
++            GetBrowserContext(), "helium-containers",
++            "incognito-" + base::Uuid::GenerateRandomV4().AsLowercaseString(),
++            /*in_memory=*/true));
++  } else if (suppress_opener) {
+@@ -5703,4 +5718,3 @@
+-      return guest->CreateNewWindow(
+-          params.disposition, params.target_url, params.frame_name,
+-          std::move(site_instance),
+-          !params.opener_suppressed ? opener : nullptr);
++      return guest->CreateNewWindow(params.disposition, params.target_url,
++                                    params.frame_name, std::move(site_instance),
++                                    !suppress_opener ? opener : nullptr);
+@@ -5717 +5731 @@
+-  create_params.opener_suppressed = params.opener_suppressed;
++  create_params.opener_suppressed = suppress_opener;
+@@ -5739 +5753 @@
+-  if (!is_guest) {
++  if (!is_guest && !independent_incognito) {
+@@ -5764,2 +5778,4 @@
+-    new_contents->GetController().SetSessionStorageNamespace(
+-        partition_config, session_storage_namespace);
++    if (!independent_incognito) {
++      new_contents->GetController().SetSessionStorageNamespace(
++          partition_config, session_storage_namespace);
++    }
+@@ -5786 +5802 @@
+-  if (!params.opener_suppressed) {
++  if (!suppress_opener) {
+@@ -5830 +5846 @@
+-  if (!params.opener_suppressed) {
++  if (!suppress_opener) {
