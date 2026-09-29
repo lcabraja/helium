@@ -1,0 +1,24 @@
+--- a/chrome/browser/ui/views/tabs/new_tab_button.cc
++++ b/chrome/browser/ui/views/tabs/new_tab_button.cc
+@@ -90,0 +91,5 @@
++  container_hold_timer_.Stop();
++  if (context_menu_runner_ && context_menu_runner_->IsRunning()) {
++    return;
++  }
++
+@@ -93,0 +99,3 @@
++    // The runner retains the model even after the native menu closes.
++    // Release it before replacing the model on a subsequent opening.
++    context_menu_runner_.reset();
+--- a/chrome/browser/ui/views/tabs/shared/new_tab_button.cc
++++ b/chrome/browser/ui/views/tabs/shared/new_tab_button.cc
+@@ -118,0 +119,5 @@
++  container_hold_timer_.Stop();
++  if (context_menu_runner_ && context_menu_runner_->IsRunning()) {
++    return;
++  }
++
+@@ -124,0 +130,3 @@
++    // The runner retains the model even after the native menu closes.
++    // Release it before replacing the model on a subsequent opening.
++    context_menu_runner_.reset();

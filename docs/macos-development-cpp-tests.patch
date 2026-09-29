@@ -1303,7 +1303,7 @@
    ShareServicePrerenderBrowserTest()
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1873,6 +1873,35 @@
+@@ -1873,6 +1873,44 @@
 
    if (is_android) {
      deps += [ "//ui/compositor" ]
@@ -1314,7 +1314,10 @@
 +  # Focused regression executable for Helium's retained UI and container tabs.
 +  test("helium_development_tests") {
 +    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-+    sources = [ "base/helium_webui_regression_browsertest.cc" ]
++    sources = [
++      "base/helium_new_tab_menu_browsertest_mac.mm",
++      "base/helium_webui_regression_browsertest.cc",
++    ]
 +    deps = [
 +      ":browser_tests_runner",
 +      ":test_support",
@@ -1322,12 +1325,18 @@
 +      "//base",
 +      "//chrome:packed_resources",
 +      "//chrome/browser/bookmarks",
++      "//chrome/browser/containers",
 +      "//chrome/browser/containers:browser_tests",
 +      "//chrome/browser/profiles:profile",
++      "//chrome/browser/ui/views/tabs:new_tab_button",
++      "//chrome/browser/ui/views/tabs/shared",
 +      "//chrome/common",
 +      "//chrome/test/base:web_ui_mocha_browser_test",
-+      "//components/bookmarks/test:test",
++      "//components/bookmarks/test",
++      "//components/prefs",
 +      "//content/test:test_support",
++      "//ui/gfx",
++      "//ui/views",
 +    ]
 +    data_deps = [
 +      "//chrome",
@@ -1339,7 +1348,7 @@
    }
  }
 
-@@ -3062,10 +3091,6 @@
+@@ -3062,10 +3100,6 @@
        "../browser/ui/webid/identity_dialog_controller_browsertest.cc",
        "../common/chrome_paths_browsertest.cc",
        "../common/time_format_browsertest.cc",
@@ -1350,6 +1359,117 @@
        "../renderer/accessibility/read_anything/read_anything_test_utils.cc",
        "../renderer/accessibility/read_anything/read_anything_test_utils.h",
        "../renderer/autofill/autofill_renderer_browsertest.cc",
+--- /dev/null
++++ b/chrome/test/base/helium_new_tab_menu_browsertest_mac.mm
+@@ -0,0 +1,108 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#import <Cocoa/Cocoa.h>
++
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "base/test/run_until.h"
++#include "chrome/browser/containers/container_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/views/tabs/new_tab_button.h"
++#include "chrome/browser/ui/views/tabs/shared/new_tab_button.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/test/browser_test.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
++#include "ui/events/event.h"
++#include "ui/events/event_utils.h"
++#include "ui/gfx/vector_icon_types.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/widget/widget.h"
++
++class HeliumNewTabMenuBrowserTest : public InProcessBrowserTest {
++ protected:
++  template <typename Button>
++  void ReopenNativeMenu(std::unique_ptr<Button> owned_button) {
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        helium::containers::kEnabledPref, true);
++    auto* widget = views::Widget::GetWidgetForNativeWindow(
++        browser()->GetWindow()->GetNativeWindow());
++    ASSERT_TRUE(widget);
++    auto* parent = widget->GetContentsView();
++    auto* button = owned_button.get();
++    parent->AddChildView(
++        std::unique_ptr<views::View>(std::move(owned_button)));
++    button->SetBounds(20, 20, 28, 28);
++    button->GetViewAccessibility().SetName(u"Test new tab");
++
++    int opened = 0;
++    int* opened_count = &opened;
++    id observer = [NSNotificationCenter.defaultCenter
++        addObserverForName:NSMenuDidBeginTrackingNotification
++                    object:nil
++                     queue:nil
++                usingBlock:^(NSNotification* notification) {
++                  ++*opened_count;
++                  // A second request must leave the active runner/model intact.
++                  button->ShowContextMenuForViewImpl(
++                      button, button->GetBoundsInScreen().CenterPoint(),
++                      ui::mojom::MenuSourceType::kMouse);
++                  NSMenu* menu = notification.object;
++                  // Cocoa disables nested Chromium tasks while tracking a menu.
++                  // Cancel on the native tracking loop after this notification.
++                  [NSRunLoop.currentRunLoop
++                      performInModes:@[ NSEventTrackingRunLoopMode ]
++                               block:^{
++                                 [menu cancelTracking];
++                               }];
++                }];
++
++    for (int i = 0; i < 16; ++i) {
++      SCOPED_TRACE(i);
++      if (i % 3 == 2) {
++        auto* view = static_cast<views::View*>(button);
++        const gfx::PointF point(button->GetLocalBounds().CenterPoint());
++        EXPECT_TRUE(view->OnMousePressed(ui::MouseEvent(
++            ui::EventType::kMousePressed, point, point, ui::EventTimeForNow(),
++            ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON)));
++        EXPECT_TRUE(base::test::RunUntil([&] { return opened == i + 1; }));
++        view->OnMouseReleased(ui::MouseEvent(
++            ui::EventType::kMouseReleased, point, point, ui::EventTimeForNow(),
++            ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
++      } else {
++        button->ShowContextMenuForViewImpl(
++            button, button->GetBoundsInScreen().CenterPoint(),
++            i % 3 == 1 ? ui::mojom::MenuSourceType::kKeyboard
++                       : ui::mojom::MenuSourceType::kMouse);
++      }
++      EXPECT_EQ(i + 1, opened);
++    }
++
++    [NSNotificationCenter.defaultCenter removeObserver:observer];
++    // Destroy the last retained runner/model as the owning view is removed.
++    parent->RemoveChildViewT(static_cast<views::View*>(button)).reset();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(HeliumNewTabMenuBrowserTest, ClassicRepeatedNativeMenu) {
++  ReopenNativeMenu(std::make_unique<NewTabButton>(
++      base::RepeatingClosure(), gfx::VectorIcon::EmptyIcon(), Edge::kNone,
++      Edge::kNone, browser()));
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumNewTabMenuBrowserTest, SharedRepeatedNativeMenu) {
++  auto button = std::make_unique<shared::NewTabButton>(browser(), 28, 16);
++  int will_show = 0;
++  int closed = 0;
++  button->SetOnContextMenuWillShowCallback(
++      base::BindRepeating([](int* count) { ++*count; }, &will_show));
++  button->SetOnContextMenuClosedCallback(
++      base::BindRepeating([](int* count) { ++*count; }, &closed));
++  ReopenNativeMenu(std::move(button));
++  EXPECT_EQ(16, will_show);
++  EXPECT_EQ(16, closed);
++}
 --- /dev/null
 +++ b/chrome/test/base/helium_webui_regression_browsertest.cc
 @@ -0,0 +1,228 @@

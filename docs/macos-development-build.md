@@ -38,7 +38,8 @@ or mix dependency versions to make configuration pass.
    `docs/container-tabs-webui-tests.patch`, followed by
    `docs/macos-development-webui-tests.patch` and
    `docs/macos-development-cpp-tests.patch`. Build `helium_development_tests` and run
-   `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
+   `ContainerBrowserTest.*`, including the `PRE_` restart test, and
+   `HeliumNewTabMenuBrowserTest.*`. Run the modified
    bookmark, history and settings WebUI checks.
    The small checkout also omits the non-Git test-font archive. Fetch the
    `src/third_party/test_fonts/test_fonts` object specified in Chromium's
@@ -62,8 +63,8 @@ SHA-256 checksum and a short report listing architecture, macOS deployment
 target, Xcode version, source revisions and test results.
 
 Discover the requested recipient in `tailscale status` and use Taildrop to send
-the archive, checksum and report. The current requested recipient is Nausicaa,
-listed as `Nausicaä` / `nausica.tail7c7833.ts.net`. This build is for local
+the archive, checksum and report. The latest requested recipient is Mitsuha,
+listed as `mitsuha` / `mitsuha.tail7c7833.ts.net`. This build is for local
 development. Keep its profile separate from the user's regular browser data.
 
 ## Notifications
@@ -77,7 +78,7 @@ Send a notification when a build needs user action and after successful Taildrop
 delivery:
 
 ```sh
-pushover-cli send --title Codex 'Helium development build sent to Nausicaa'
+pushover-cli send --title Codex 'Helium development build sent to Mitsuha'
 ```
 
 Only send that completion message after the build and transfer succeed.
@@ -131,3 +132,35 @@ successful patch replay alone is not a runtime test result. The bundle declares
 macOS 15.0 or newer; the current runtime checks use macOS 27.0. Audit deployment
 targets and bundled dependencies, and report older macOS versions as untested
 unless the app has actually run there.
+
+## New-tab menu crash regression
+
+`container-tabs-menu-lifetime.patch` fixes repeated openings of the plus-button
+menu in both classic and shared tab-strip buttons. A closed native menu runner
+still retains its menu model. Destroy the runner before replacing that model,
+stop any pending hold timer, and ignore another open request while the menu is
+running. Keep Chromium's dangling-pointer checks enabled.
+
+The macOS `HeliumNewTabMenuBrowserTest` cases use real Cocoa menus. Each button
+opens and cancels its menu 16 times through mouse, keyboard and the 500 ms hold
+timer. Every native opening also attempts a second open while the first menu is
+active. The shared-button case checks that its show/close callbacks stay paired,
+and both cases remove the owning view after the last menu closes. Run with
+`--test-launcher-jobs=1 --test-launcher-retry-limit=0 --use-mock-keychain`.
+
+Also use the packaged app with a disposable profile to open ordinary and
+container tabs, cancel and reopen the plus menu, create tab groups and split
+views, close and restore tabs, and switch between all four browser layouts. The dynamic toolbar uses a
+separate new-tab control without this context menu; test tab creation and
+restoration there rather than counting a no-op right-click as a menu check.
+The native regression tests complement these manual checks.
+
+The September 29 crash-fix validation reproduced the previous packaged build's
+failure on the second right-click after dismissing the first menu. The fixed
+package completed repeated menu checks in classic, compact and expanded and
+collapsed vertical layouts, with more than 20 tabs across two windows. Work and
+Banking container creation, pinning, groups, split views, tab restoration and
+window closure also worked. Both native-menu regression cases passed, as did all
+16 container executions including the PRE setup and the appearance WebUI suite,
+with retries disabled. All 377 production/platform/supplemental patches replayed
+without fuzz; repository lint and the focused GN header check passed.
