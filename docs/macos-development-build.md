@@ -36,7 +36,8 @@ or mix dependency versions to make configuration pass.
    only in the generated Chromium tree.
 3. For a source checkout containing Chromium's test data, apply
    `docs/container-tabs-webui-tests.patch`, followed by
-   `docs/macos-development-webui-tests.patch`. Build `browser_tests` and run
+   `docs/macos-development-webui-tests.patch` and
+   `docs/macos-development-noise-tests.patch`. Build `browser_tests` and run
    `ContainerBrowserTest.*`, including the `PRE_` restart test. Run the modified
    bookmark, history and settings WebUI checks.
    The small checkout also omits the non-Git test-font archive. Fetch the
@@ -152,3 +153,9 @@ did not check the managed-theme guard. Both fixes are in the normal patch series
 The 37 modified container C++/Objective-C++ translation units and the WebUI test
 resources compile with the current Xcode toolchain. Runtime validation remains
 required.
+
+The full test build also needs `docs/macos-development-noise-tests.patch`.
+It passes explicit empty noise-token maps when standalone Blink fixtures create
+pages and web views, and adds the noise-token update method to page-broadcast
+test doubles. These fixtures have no browser-provided noise tokens. Production
+callers still supply their tokens through the required constructor arguments.
