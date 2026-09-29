@@ -1,0 +1,77 @@
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -20138,0 +20139,3 @@
++      <message name="IDS_CUSTOMIZE_SHOW_PROFILE_PICKER" desc="Toggle for showing the profile menu button in the toolbar.">
++        Show profile picker
++      </message>
+--- a/chrome/browser/resources/side_panel/customize_chrome/appearance.css
++++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.css
+@@ -123 +123,2 @@
+-#followThemeToggle {
++#followThemeToggle,
++#profilePickerToggle {
+--- a/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
++++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
+@@ -51,0 +52,8 @@
++<div id="profilePickerToggle" class="sp-card-content">
++  <div id="profilePickerToggleTitle">$i18n{showProfilePicker}</div>
++  <cr-toggle id="profilePickerToggleControl"
++      aria-labelledby="profilePickerToggleTitle"
++      ?checked="${this.profilePickerVisible_}"
++      @change="${this.onProfilePickerToggleChange_}">
++  </cr-toggle>
++</div>
+--- a/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
++++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
+@@ -37,0 +38 @@
++    profilePickerToggleControl: CrToggleElement,
+@@ -58,0 +60 @@
++      profilePickerVisible_: {type: Boolean},
+@@ -95,0 +98 @@
++  protected accessor profilePickerVisible_: boolean = true;
+@@ -126,0 +130,2 @@
++      this.apiProxy_.callbackRouter.setProfilePickerVisibility.addListener(
++          visible => { this.profilePickerVisible_ = visible; }),
+@@ -141,0 +147 @@
++    this.apiProxy_.handler.updateProfilePickerVisibility();
+@@ -199,0 +206,4 @@
++  protected onProfilePickerToggleChange_(event: CustomEvent<boolean>) {
++    this.apiProxy_.handler.setProfilePickerVisibility(event.detail);
++  }
++
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
+@@ -164,0 +165,3 @@
++
++  UpdateProfilePickerVisibility();
++  SetProfilePickerVisibility(bool visible);
+@@ -258,0 +262,2 @@
++
++  SetProfilePickerVisibility(bool visible);
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
+@@ -135,0 +136,5 @@
++      prefs::kShowAvatarButton,
++      base::BindRepeating(
++          &CustomizeChromePageHandler::UpdateProfilePickerVisibility,
++          base::Unretained(this)));
++  pref_change_registrar_.Add(
+@@ -329,0 +335,9 @@
++void CustomizeChromePageHandler::UpdateProfilePickerVisibility() {
++  page_->SetProfilePickerVisibility(
++      profile_->GetPrefs()->GetBoolean(prefs::kShowAvatarButton));
++}
++
++void CustomizeChromePageHandler::SetProfilePickerVisibility(bool visible) {
++  profile_->GetPrefs()->SetBoolean(prefs::kShowAvatarButton, visible);
++}
++
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
+@@ -127,0 +128,2 @@
++  void UpdateProfilePickerVisibility() override;
++  void SetProfilePickerVisibility(bool visible) override;
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
+@@ -106,0 +107 @@
++      {"showProfilePicker", IDS_CUSTOMIZE_SHOW_PROFILE_PICKER},

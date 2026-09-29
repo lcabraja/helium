@@ -1671,7 +1671,7 @@
 +});
 --- /dev/null
 +++ b/chrome/test/data/webui/side_panel/customize_chrome/helium_appearance_test.ts
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,148 @@
 +// Copyright 2026 The Helium Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1718,6 +1718,20 @@
 +    appearance = document.createElement('customize-chrome-appearance');
 +    document.body.appendChild(appearance);
 +    await setTheme(createTheme());
++  });
++
++  test('profile picker visibility follows the shared toolbar preference', async () => {
++    assertEquals(1, handler.getCallCount('updateProfilePickerVisibility'));
++    callback.setProfilePickerVisibility(false);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertFalse(appearance.$.profilePickerToggleControl.checked);
++    appearance.$.profilePickerToggleControl.click();
++    assertTrue(await handler.whenCalled('setProfilePickerVisibility'));
++    callback.setProfilePickerVisibility(true);
++    await callback.$.flushForTesting();
++    await microtasksFinished();
++    assertTrue(appearance.$.profilePickerToggleControl.checked);
 +  });
 +
 +  test('uses one local wallpaper button and hides Google controls', () => {

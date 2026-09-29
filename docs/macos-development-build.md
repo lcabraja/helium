@@ -164,3 +164,15 @@ window closure also worked. Both native-menu regression cases passed, as did all
 16 container executions including the PRE setup and the appearance WebUI suite,
 with retries disabled. All 377 production/platform/supplemental patches replayed
 without fuzz; repository lint and the focused GN header check passed.
+
+## Profile-picker control on 30 September 2026
+
+`patches/helium/core/customize-profile-picker.patch` adds **Show profile picker**
+to the Appearance card in Customize Helium. It uses the existing
+`helium.browser.show_avatar_button` preference and updates from changes made
+through toolbar customization. The preference defaults to enabled.
+
+The appearance regression checks callback updates and preference changes. Native
+checks confirmed immediate hiding and persistence across a clean quit/restart.
+The app, chromedriver and focused tests build, and all 27 selected regression
+executions pass alongside the incognito/container changes.
