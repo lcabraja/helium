@@ -1,53 +1,106 @@
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
-@@ -641,0 +642 @@
+@@ -638,7 +638,8 @@
+ #define IDC_OPEN_IMAGE_IN_CONTAINER 55005
+ #define IDC_OPEN_BOOKMARK_IN_CONTAINER 55006
+ #define IDC_OPEN_MEDIA_IN_CONTAINER 55007
 +#define IDC_NEW_INCOGNITO_TAB 55008
-@@ -643 +644 @@
+ #define IDC_CONTAINER_FIRST 55100
 -#define IDC_CONTAINER_LAST  55199
 +#define IDC_CONTAINER_LAST  55599
+ 
+ #endif  // CHROME_APP_CHROME_COMMAND_IDS_H_
 --- a/chrome/app/generated_resources.grd
 +++ b/chrome/app/generated_resources.grd
-@@ -20137 +20137 @@
+@@ -20595,8 +20595,10 @@
+     <message name="IDS_CONTAINER_GRAY" desc="Helium container tabs: gray">Gray</message>
+     <message name="IDS_CONTAINER_SAVE" desc="Helium container tabs: save">Save</message>
+     <message name="IDS_CONTAINER_DONE" desc="Helium container tabs: done">Done</message>
 -    <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 100 containers.</message>
 +    <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 500 containers.</message>
-@@ -20138,0 +20139,2 @@
+     <message name="IDS_CONTAINER_CLOSE_PENDING" desc="Helium container tabs: close pending">Finish closing the container tabs, then try again. Site data has not been deleted.</message>
 +    <message name="IDS_CONTAINER_INCOGNITO" desc="Menu choice for a tab with its own temporary cookies and site data">Incognito tab</message>
 +    <message name="IDS_CONTAINER_NEW_INCOGNITO" desc="New tab with its own temporary cookies and site data">New incognito tab</message>
+     <message name="IDS_CONTAINER_DELETED" desc="Helium container tabs: deleted">Deleted container</message>
+     <message name="IDS_CONTAINER_DELETE_CONFIRM" desc="Helium container tabs: delete confirm">Close all tabs in <ph name="CONTAINER_NAME">$1<ex>Work</ex></ph> and delete its cookies and site data? This cannot be undone.</message>
+   </messages>
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -79,0 +80 @@
+@@ -77,6 +77,7 @@
+ #include "chrome/browser/chrome_content_browser_client_binder_policies.h"
+ #include "chrome/browser/chrome_content_browser_client_navigation_throttles.h"
+ #include "chrome/browser/chrome_content_browser_client_parts.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -4361 +4362,3 @@
+ #include "chrome/browser/content_settings/cookie_settings_factory.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/contextual_tasks/contextual_tasks_ui_service.h"
+@@ -4358,7 +4359,9 @@
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+   DCHECK(profile);
 -  *no_javascript_access = false;
 +  *no_javascript_access =
 +      helium::containers::IsIncognitoTab(web_contents) &&
 +      disposition != WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+ 
+   // A privileged WebContents (see //chrome's PrivilegedWebContents) must not
+   // create related windows: the new window would share an opener relationship
 --- a/chrome/browser/containers/BUILD.gn
 +++ b/chrome/browser/containers/BUILD.gn
-@@ -8,0 +9 @@
+@@ -6,6 +6,7 @@
+   sources = [
+     "container_service.cc",
+     "container_service.h",
 +    "incognito_container_service.cc",
-@@ -33,0 +35,4 @@
+   ]
+   public_deps = [
+     "//base",
+@@ -31,6 +32,10 @@
+   sources = [ "container_browsertest.cc" ]
+   deps = [
+     ":containers",
 +    "//chrome/browser/history",
 +    "//chrome/browser/ui/tabs/saved_tab_groups",
 +    "//components/history/core/browser",
 +    "//components/saved_tab_groups/public",
+     "//base/test:test_support",
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/resource_coordinator",
 --- a/chrome/browser/containers/container_browsertest.cc
 +++ b/chrome/browser/containers/container_browsertest.cc
-@@ -10,0 +11 @@
+@@ -8,10 +8,13 @@
+ #include <vector>
+ 
+ #include "base/functional/bind.h"
 +#include "base/task/cancelable_task_tracker.h"
-@@ -13,0 +15 @@
+ #include "base/test/run_until.h"
+ #include "base/test/test_future.h"
+ #include "base/time/time.h"
 +#include "base/uuid.h"
-@@ -14,0 +17 @@
+ #include "chrome/browser/containers/container_service.h"
 +#include "chrome/browser/history/history_service_factory.h"
-@@ -22,0 +26 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
+@@ -20,10 +23,14 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/containers/container_ui.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
 +#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-@@ -23,0 +28 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/common/webui_url_constants.h"
-@@ -25,0 +31 @@
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
 +#include "components/history/core/browser/history_service.h"
-@@ -26,0 +33 @@
+ #include "components/prefs/pref_service.h"
 +#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
-@@ -75,0 +83,18 @@
+ #include "content/public/browser/browsing_data_filter_builder.h"
+ #include "content/public/browser/browsing_data_remover.h"
+ #include "content/public/browser/navigation_controller.h"
+@@ -73,6 +80,24 @@
+     EXPECT_TRUE(content::WaitForLoadStop(tab));
+     EXPECT_EQ(id, GetContainerId(tab));
+     return tab;
 +  }
 +
 +  content::WebContents* OpenIncognito() {
@@ -66,7 +119,13 @@
 +                              TabCloseTypes::CLOSE_USER_GESTURE |
 +                                  TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
 +    content::RunAllTasksUntilIdle();
-@@ -478,0 +504,240 @@
+   }
+ 
+   std::string Personal() {
+@@ -476,4 +501,244 @@
+   FAIL() << "Container metadata did not survive profile restart";
+ }
+ 
 +IN_PROC_BROWSER_TEST_F(ContainerBrowserTest, IncognitoStorageAndDuplicates) {
 +  auto* original = OpenIncognito();
 +  const auto id = GetContainerId(original);
@@ -307,23 +366,46 @@
 +  EXPECT_TRUE(SaveContainer(profile, personal, u"Renamed at capacity", 0, 0));
 +}
 +
+ }  // namespace helium::containers
 --- a/chrome/browser/containers/container_service.cc
 +++ b/chrome/browser/containers/container_service.cc
-@@ -89 +89 @@
+@@ -86,10 +86,12 @@
+     const auto icon = dict->FindInt("icon");
+     if (!id || !IsValidId(*id) || !name || name->empty() || !color ||
+         *color < 0 || *color >= static_cast<int>(kColorCount) || !icon ||
 -        *icon < 0 || *icon >= static_cast<int>(kIconCount)) {
 +        *icon < 0 || *icon > static_cast<int>(kIconCount)) {
-@@ -92 +92,3 @@
+       continue;
+     }
 -    containers.push_back({*id, base::UTF8ToUTF16(*name), *color, *icon});
 +    // The retired umbrella icon keeps its identity and falls back to a dot.
 +    containers.push_back({*id, base::UTF8ToUTF16(*name), *color,
 +                          *icon < static_cast<int>(kIconCount) ? *icon : 0});
-@@ -173 +175 @@
+     if (containers.size() == kMaxContainers) {
+       break;
+     }
+@@ -170,7 +172,7 @@
+ 
+ std::u16string GetIcon(int icon) {
+   constexpr std::array<const char16_t*, kIconCount> icons = {
 -      u"●", u"▣", u"◆", u"◈", u"★", u"✿", u"▲", u"☂"};
 +      u"●", u"▣", u"◆", u"◈", u"★", u"✿", u"▲"};
-@@ -189 +191 @@
+   return icons[icon >= 0 && icon < static_cast<int>(icons.size()) ? icon : 0];
+ }
+ 
+@@ -186,7 +188,7 @@
+ 
+ content::StoragePartitionConfig GetPartitionConfig(Profile* profile,
+                                                    const std::string& id) {
 -  CHECK(IsValidId(id));
 +  CHECK(IsValidId(id) || IsIncognitoContainerId(id));
-@@ -200 +202,7 @@
+   return content::StoragePartitionConfig::Create(
+       profile, kPartitionDomain, id,
+       /*in_memory=*/profile->IsOffTheRecord() || !FindContainer(profile, id));
+@@ -197,7 +199,13 @@
+                                                         const std::string& id) {
+   // A damaged session identifier must also fail closed.
+   const auto safe_id =
 -      IsValidId(id) ? id : base::Uuid::GenerateRandomV4().AsLowercaseString();
 +      IsIncognitoContainerId(id)
 +          ? (IsIncognitoContainerAvailable(profile, id)
@@ -332,14 +414,26 @@
 +          : (IsValidId(id)
 +                 ? id
 +                 : base::Uuid::GenerateRandomV4().AsLowercaseString());
+   return content::SiteInstance::CreateForFixedStoragePartition(
+       profile, url, GetPartitionConfig(profile, safe_id));
+ }
 --- a/chrome/browser/containers/container_service.h
 +++ b/chrome/browser/containers/container_service.h
-@@ -12,0 +13 @@
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/memory/scoped_refptr.h"
 +#include "base/time/time.h"
-@@ -31 +32 @@
+ #include "content/public/browser/storage_partition_config.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ 
+@@ -28,9 +29,22 @@
+ inline constexpr char kAskForNewTabPref[] = "helium.containers.ask_for_new_tab";
+ inline constexpr char kSessionKey[] = "helium.container_id";
+ inline constexpr char kPartitionDomain[] = "helium-containers";
 -inline constexpr size_t kMaxContainers = 100;
 +inline constexpr size_t kMaxContainers = 500;
-@@ -33 +34,14 @@
+ inline constexpr size_t kColorCount = 8;
 -inline constexpr size_t kIconCount = 8;
 +inline constexpr size_t kIconCount = 7;
 +
@@ -355,6 +449,9 @@
 +void TrackIncognitoTab(content::WebContents* contents);
 +void ExpireIncognitoContainersForTesting(Profile* profile, base::TimeTicks now);
 +bool HasIncognitoCleanupPendingForTesting(Profile* profile);
+ 
+ struct Container {
+   std::string id;
 --- /dev/null
 +++ b/chrome/browser/containers/incognito_container_service.cc
 @@ -0,0 +1,240 @@
@@ -600,48 +697,111 @@
 +}  // namespace helium::containers
 --- a/chrome/browser/favicon/BUILD.gn
 +++ b/chrome/browser/favicon/BUILD.gn
-@@ -34,0 +35 @@
+@@ -32,6 +32,7 @@
+   ]
+   public_deps = [ ":favicon" ]
+   deps = [
 +    "//chrome/browser/containers",
+     "//chrome/app/resources:platform_locale_settings",
+     "//chrome/browser:browser_features",
+     "//chrome/browser/history",
 --- a/chrome/browser/favicon/favicon_utils.cc
 +++ b/chrome/browser/favicon/favicon_utils.cc
-@@ -8,0 +9 @@
+@@ -6,6 +6,7 @@
+ 
+ #include "base/hash/sha1.h"
+ #include "build/build_config.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -82,2 +83,4 @@
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/common/url_constants.h"
+@@ -79,8 +80,10 @@
+           ->GetOriginalProfile();
+   return ContentFaviconDriver::CreateForWebContents(
+       web_contents,
 -      FaviconServiceFactory::GetForProfile(original_profile,
 -                                           ServiceAccessType::IMPLICIT_ACCESS));
 +      helium::containers::IsIncognitoTab(web_contents)
 +          ? nullptr
 +          : FaviconServiceFactory::GetForProfile(
 +                original_profile, ServiceAccessType::IMPLICIT_ACCESS));
+ }
+ 
+ SkBitmap GenerateMonogramFavicon(GURL url, int icon_size, int circle_size) {
 --- a/chrome/browser/history/BUILD.gn
 +++ b/chrome/browser/history/BUILD.gn
-@@ -47,0 +48 @@
+@@ -45,6 +45,7 @@
+     "//chrome/browser:browser_public_dependencies",
+   ]
+   deps = [
 +    "//chrome/browser/containers",
+     "//base",
+     "//chrome/browser/actor",
+     "//chrome/browser/bookmarks",
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
-@@ -14,0 +15 @@
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/actor/actor_keyed_service.h"
+ #include "chrome/browser/actor/actor_task.h"
+ #include "chrome/browser/complex_tasks/task_tab_helper.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -647 +648,2 @@
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -644,7 +645,8 @@
+ history::HistoryService* HistoryTabHelper::GetHistoryService() {
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 -  if (profile->IsOffTheRecord()) {
 +  if (profile->IsOffTheRecord() ||
 +      helium::containers::IsIncognitoTab(web_contents())) {
+     return nullptr;
+   }
+ 
 --- a/chrome/browser/password_manager/BUILD.gn
 +++ b/chrome/browser/password_manager/BUILD.gn
-@@ -153,0 +154 @@
+@@ -151,6 +151,7 @@
+   ]
+ 
+   deps = [
 +    "//chrome/browser/containers",
+     "//chrome/browser/actor",
+     "//chrome/browser/affiliations",
+     "//chrome/browser/autofill",
 --- a/chrome/browser/password_manager/chrome_password_manager_client.cc
 +++ b/chrome/browser/password_manager/chrome_password_manager_client.cc
-@@ -33,0 +34 @@
+@@ -31,6 +31,7 @@
+ #include "chrome/browser/actor/actor_keyed_service.h"
+ #include "chrome/browser/affiliations/affiliation_service_factory.h"
+ #include "chrome/browser/browser_process.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -1136 +1137,2 @@
+ #include "chrome/browser/critical_actions/critical_action_factory.h"
+ #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+@@ -1133,7 +1134,8 @@
+ }
+ 
+ bool ChromePasswordManagerClient::IsOffTheRecord() const {
 -  return web_contents()->GetBrowserContext()->IsOffTheRecord();
 +  return web_contents()->GetBrowserContext()->IsOffTheRecord() ||
 +         helium::containers::IsIncognitoTab(web_contents());
+ }
+ 
+ profile_metrics::BrowserProfileType
 --- a/chrome/browser/sessions/chrome_tab_restore_service_client.cc
 +++ b/chrome/browser/sessions/chrome_tab_restore_service_client.cc
-@@ -7,0 +8 @@
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
+ 
+ #include "build/build_config.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -93,0 +95,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/session_common_utils.h"
+ #include "chrome/common/url_constants.h"
+@@ -91,6 +92,13 @@
+   return ::ShouldTrackURLForRestore(url);
+ }
+ 
 +bool ChromeTabRestoreServiceClient::ShouldPersistTab(
 +    const std::map<std::string, std::string>& extra_data) {
 +  const auto it = extra_data.find(helium::containers::kSessionKey);
@@ -649,61 +809,127 @@
 +         !helium::containers::IsIncognitoContainerId(it->second);
 +}
 +
+ std::string ChromeTabRestoreServiceClient::GetExtensionAppIDForTab(
+     sessions::LiveTab* tab) {
+   std::string app_id;
 --- a/chrome/browser/sessions/chrome_tab_restore_service_client.h
 +++ b/chrome/browser/sessions/chrome_tab_restore_service_client.h
-@@ -43,0 +44,2 @@
+@@ -41,6 +41,8 @@
+   sessions::LiveTabContext* FindLiveTabContextWithGroup(
+       tab_groups::TabGroupId group) override;
+   bool ShouldTrackURLForRestore(const GURL& url) override;
 +  bool ShouldPersistTab(
 +      const std::map<std::string, std::string>& extra_data) override;
+   std::string GetExtensionAppIDForTab(sessions::LiveTab* tab) override;
+   base::FilePath GetPathToSaveTo() override;
+   GURL GetNewTabURL() override;
 --- a/chrome/browser/sessions/session_service_base.cc
 +++ b/chrome/browser/sessions/session_service_base.cc
-@@ -283,0 +284,3 @@
+@@ -281,6 +281,9 @@
+ }
+ 
+ void SessionServiceBase::TabInserted(WebContents* contents) {
 +  if (helium::containers::IsIncognitoTab(contents)) {
 +    return;
 +  }
-@@ -622,0 +626,3 @@
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(contents);
+   if (!ShouldTrackChangesToWindow(session_tab_helper->window_id())) {
+@@ -620,6 +623,9 @@
+     IdToRange* tab_to_available_range) {
+   DCHECK(tab);
+   DCHECK(window_id.is_valid());
 +  if (helium::containers::IsIncognitoTab(tab)) {
 +    return;
 +  }
+ 
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(tab);
 --- a/chrome/browser/sessions/session_tab_helper_factory.cc
 +++ b/chrome/browser/sessions/session_tab_helper_factory.cc
-@@ -4,0 +5,3 @@
+@@ -2,10 +2,10 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
 +#include "chrome/browser/buildflags.h"
 +#include "chrome/browser/containers/container_service.h"
 +#include "chrome/common/buildflags.h"
-@@ -6,3 +8,0 @@
+ #include "components/sessions/content/session_tab_helper.h"
 -
 -#include "chrome/browser/buildflags.h"
 -#include "chrome/common/buildflags.h"
-@@ -28,0 +29,3 @@
+ #include "extensions/buildflags/buildflags.h"
+ 
+ #if BUILDFLAG(ENABLE_SESSION_SERVICE)
+@@ -26,6 +26,9 @@
+ #if BUILDFLAG(ENABLE_SESSION_SERVICE)
+ sessions::SessionTabHelperDelegate* GetSessionTabHelperDelegate(
+     content::WebContents* web_contents) {
 +  if (helium::containers::IsIncognitoTab(web_contents)) {
 +    return nullptr;
 +  }
+   // With AppSessionService, we now need to know if the WebContents
+   // belongs to an AppSessionService or SessionService.
+   if (IsRelevantToAppSessionService(web_contents)) {
 --- a/chrome/browser/ui/autofill/BUILD.gn
 +++ b/chrome/browser/ui/autofill/BUILD.gn
-@@ -188,0 +189 @@
+@@ -186,6 +186,7 @@
+   public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+ 
+   deps = [
 +    "//chrome/browser/containers",
+     ":autofill",
+     ":autofill_ai_ui_utils_impl",
+     "//chrome/browser:browser_process",
 --- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
 +++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
-@@ -51,0 +52 @@
+@@ -49,6 +49,7 @@
+ #include "chrome/browser/autofill/wallet_pass_access_manager_factory.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -431 +432,2 @@
+ #include "chrome/browser/critical_actions/critical_action_factory.h"
+ #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
+@@ -428,7 +429,8 @@
+ 
+ bool ChromeAutofillClient::IsOffTheRecord() const {
+   auto* mutable_this = const_cast<ChromeAutofillClient*>(this);
 -  return mutable_this->web_contents()->GetBrowserContext()->IsOffTheRecord();
 +  return mutable_this->web_contents()->GetBrowserContext()->IsOffTheRecord() ||
 +         helium::containers::IsIncognitoTab(mutable_this->web_contents());
+ }
+ 
+ const subscription_eligibility::SubscriptionEligibilityService*
 --- a/chrome/browser/ui/browser_tabrestore.cc
 +++ b/chrome/browser/ui/browser_tabrestore.cc
-@@ -85,2 +85,4 @@
+@@ -82,8 +82,10 @@
+         browser->GetProfile(), restore_url, container->second);
+     session_storage_namespace_map.clear();
+     if (session_storage_namespace &&
 -        helium::containers::FindContainer(browser->GetProfile(),
 -                                          container->second)) {
 +        (helium::containers::FindContainer(browser->GetProfile(),
 +                                           container->second) ||
 +         helium::containers::IsIncognitoContainerAvailable(
 +             browser->GetProfile(), container->second))) {
+       session_storage_namespace_map.emplace(
+           helium::containers::GetPartitionConfig(browser->GetProfile(),
+                                                  container->second),
 --- a/chrome/browser/ui/containers/container_ui.cc
 +++ b/chrome/browser/ui/containers/container_ui.cc
-@@ -43,0 +44 @@
+@@ -41,6 +41,7 @@
+ #include "ui/views/layout/box_layout.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/window/dialog_delegate.h"
 +#include "ui/views/window/non_client_view.h"
-@@ -160,3 +161,5 @@
+ 
+ namespace helium::containers {
+ namespace {
+@@ -157,9 +158,11 @@
+                 Text(IDS_CONTAINER_PURPLE), Text(IDS_CONTAINER_RED),
+                 Text(IDS_CONTAINER_TURQUOISE), Text(IDS_CONTAINER_GRAY)},
+                container ? container->color : 0);
 -  auto* icon = AddCombo(contents, IDS_CONTAINER_ICON,
 -                        {GetIcon(0), GetIcon(1), GetIcon(2), GetIcon(3),
 -                         GetIcon(4), GetIcon(5), GetIcon(6), GetIcon(7)},
@@ -712,9 +938,21 @@
 +    icons.push_back(GetIcon(i));
 +  }
 +  auto* icon = AddCombo(contents, IDS_CONTAINER_ICON, std::move(icons),
-@@ -236 +238,0 @@
+                         container ? container->icon : 0);
+   auto* error = contents->AddChildView(std::make_unique<views::Label>());
+   error->SetMultiLine(true);
+@@ -233,7 +236,6 @@
+     dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk));
+     dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
+                            Text(IDS_CONTAINER_DONE));
 -    SetPreferredSize(gfx::Size(480, 520));
-@@ -279,0 +282,7 @@
+     SetLayout(this);
+     auto* enabled = AddChildView(
+         std::make_unique<views::Checkbox>(Text(IDS_CONTAINER_ENABLED)));
+@@ -277,6 +279,13 @@
+   }
+ 
+  private:
 +  gfx::Size CalculatePreferredSize(
 +      const views::SizeBounds& available_size) const override {
 +    auto preferred = views::View::CalculatePreferredSize(available_size);
@@ -722,34 +960,78 @@
 +    return preferred;
 +  }
 +
-@@ -321,0 +331,3 @@
+   void Edit(std::string id) {
+     if (browser_) {
+       ShowEditor(browser_.get(), std::move(id), GetWidget());
+@@ -319,6 +328,9 @@
+           Text(IDS_CONTAINER_DELETE)));
+     }
+     PreferredSizeChanged();
 +    if (GetWidget()) {
 +      GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
 +    }
-@@ -398,0 +411 @@
+   }
+ 
+   base::WeakPtr<BrowserWindowInterface> browser_;
+@@ -396,6 +408,7 @@
+         reopen_(std::move(reopen)),
+         containers_(GetContainers(browser->GetProfile())) {
+     AddItem(IDC_CONTAINER_DEFAULT, Text(IDS_CONTAINER_NONE));
 +    AddItem(IDC_NEW_INCOGNITO_TAB, Text(IDS_CONTAINER_INCOGNITO));
-@@ -425 +438,3 @@
+     for (size_t i = 0; i < containers_.size(); ++i) {
+       const auto& container = containers_[i];
+       AddItemWithIcon(IDC_CONTAINER_FIRST + i,
+@@ -422,7 +435,9 @@
+       return;
+     }
+     std::string id;
 -    if (command_id != IDC_CONTAINER_DEFAULT) {
 +    if (command_id == IDC_NEW_INCOGNITO_TAB) {
 +      id = kNewIncognitoContainer;
 +    } else if (command_id != IDC_CONTAINER_DEFAULT) {
-@@ -484 +499,2 @@
+       const int index = command_id - IDC_CONTAINER_FIRST;
+       if (index < 0 || index >= static_cast<int>(containers_.size()) ||
+           !IsEnabled(browser_->GetProfile())) {
+@@ -481,7 +496,8 @@
+                      const std::string& id) {
+   if (!browser || browser->GetProfile()->IsOffTheRecord() ||
+       (!id.empty() && (!IsEnabled(browser->GetProfile()) ||
 -                       !FindContainer(browser->GetProfile(), id)))) {
 +                       (id != kNewIncognitoContainer &&
 +                        !FindContainer(browser->GetProfile(), id))))) {
-@@ -499 +515,3 @@
+     return false;
+   }
+   const std::vector<GURL> targets =
+@@ -496,7 +512,9 @@
+       continue;
+     }
+     NavigateParams params(browser, url, ui::PAGE_TRANSITION_LINK);
 -    params.container_id = id;
 +    params.container_id = id == kNewIncognitoContainer
 +                              ? CreateIncognitoContainer(browser->GetProfile())
 +                              : id;
-@@ -523 +541,2 @@
+     params.disposition = first ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+                                : WindowOpenDisposition::NEW_BACKGROUND_TAB;
+     params.window_action = NavigateParams::WindowAction::kShowWindow;
+@@ -520,21 +538,23 @@
+                          Text(IDS_CONTAINER_OPEN));
+   contents->SetPreferredSize(gfx::Size(400, 160));
+   SetLayout(contents);
 -  std::vector<std::u16string> choices = {Text(IDS_CONTAINER_NONE)};
 +  std::vector<std::u16string> choices = {Text(IDS_CONTAINER_NONE),
 +                                         Text(IDS_CONTAINER_INCOGNITO)};
-@@ -528 +547 @@
+   for (const auto& container : containers) {
+     choices.push_back(GetIcon(container.icon) + u" " + container.name);
+   }
+   auto* combo = AddCombo(contents, IDS_CONTAINER_CHOOSE, std::move(choices),
 -                         containers.empty() ? 0 : 1);
 +                         containers.empty() ? 0 : 2);
-@@ -535,3 +554,4 @@
+   dialog->SetInitiallyFocusedView(combo);
+   dialog->SetAcceptCallback(base::BindOnce(
+       [](base::WeakPtr<BrowserWindowInterface> browser, std::vector<GURL> urls,
+          std::vector<Container> containers, views::Combobox* combo) {
+         if (browser) {
+           const size_t index = combo->GetSelectedIndex().value_or(0);
 -          OpenInContainer(
 -              browser.get(), urls,
 -              index == 0 ? std::string() : containers[index - 1].id);
@@ -757,9 +1039,15 @@
 +                          index == 0   ? std::string()
 +                          : index == 1 ? kNewIncognitoContainer
 +                                       : containers[index - 2].id);
+         }
+       },
+       browser->GetWeakPtr(), std::move(urls), containers, combo));
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
-@@ -766,0 +767,15 @@
+@@ -764,6 +764,21 @@
+     }
+   }
+ 
 +  if (!params->container_id.has_value()) {
 +    params->container_id =
 +        helium::containers::GetContainerId(params->source_contents);
@@ -775,7 +1063,13 @@
 +    }
 +  }
 +
-@@ -792,9 +806,0 @@
+   // An explicit identity change must create a fresh browsing context. Never
+   // carry an opener, initiator, or referrer across the storage boundary.
+   if (params->container_id.has_value()) {
+@@ -789,15 +804,6 @@
+       if (params->disposition == WindowOpenDisposition::CURRENT_TAB) {
+         params->disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+       }
 -    }
 -  }
 -
@@ -785,48 +1079,108 @@
 -    if (params->opener) {
 -      params->container_id = helium::containers::GetContainerId(
 -          content::WebContents::FromRenderFrameHost(params->opener));
+     }
+   }
+ 
 --- a/chrome/browser/ui/tab_helpers.cc
 +++ b/chrome/browser/ui/tab_helpers.cc
-@@ -25,0 +26 @@
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/chrome_content_browser_client.h"
+ #include "chrome/browser/commerce/shopping_service_factory.h"
+ #include "chrome/browser/complex_tasks/task_tab_helper.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -324,0 +326,2 @@
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+ #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
+@@ -322,6 +323,8 @@
+   web_contents->SetUserData(&kTabContentsAttachedTabHelpersUserDataKey,
+                             std::make_unique<base::SupportsUserData::Data>());
+ 
 +  helium::containers::TrackIncognitoTab(web_contents);
 +
+   // Create all the tab helpers.
+ 
+   // SessionTabHelper comes first because it sets up the tab ID, and other
 --- a/chrome/browser/ui/tabs/saved_tab_groups/BUILD.gn
 +++ b/chrome/browser/ui/tabs/saved_tab_groups/BUILD.gn
-@@ -85,0 +86 @@
+@@ -83,6 +83,7 @@
+     "tab_group_sync_delegate_desktop.cc",
+   ]
+   deps = [
 +    "//chrome/browser/containers",
+     ":saved_tab_groups",
+     "//base",
+     "//chrome/app:generated_resources",
 --- a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.cc
 +++ b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.cc
-@@ -17,0 +18 @@
+@@ -15,6 +15,7 @@
+ #include "base/uuid.h"
+ #include "chrome/browser/collaboration/collaboration_service_factory.h"
+ #include "chrome/browser/collaboration/messaging/messaging_backend_service_factory.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -480,0 +482,4 @@
+ #include "chrome/browser/data_sharing/data_sharing_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/signin/identity_manager_factory.h"
+@@ -478,6 +479,10 @@
+ SavedTabGroupTab SavedTabGroupUtils::CreateSavedTabGroupTabFromWebContents(
+     content::WebContents* contents,
+     base::Uuid saved_tab_group_id) {
 +  if (helium::containers::IsIncognitoTab(contents)) {
 +    return SavedTabGroupTab(GURL(chrome::kChromeUINewTabURL), std::u16string(),
 +                            saved_tab_group_id, /*position=*/std::nullopt);
 +  }
+   SavedTabGroupTab tab(
+       contents->GetVisibleURL().is_empty() ? GURL(chrome::kChromeUINewTabURL)
+                                            : contents->GetVisibleURL(),
 --- a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.cc
 +++ b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.cc
-@@ -8,0 +9 @@
+@@ -6,6 +6,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "chrome/browser/browser_process.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -171,0 +173,3 @@
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -169,6 +170,9 @@
+ }
+ 
+ void SavedTabGroupWebContentsListener::NavigateToUrlInternal(const GURL& url) {
 +  if (helium::containers::IsIncognitoTab(contents())) {
 +    return;
 +  }
-@@ -231,0 +236,3 @@
+   if (!url.is_valid()) {
+     return;
+   }
+@@ -229,6 +233,9 @@
+ 
+ void SavedTabGroupWebContentsListener::DidFinishNavigation(
+     content::NavigationHandle* navigation_handle) {
 +  if (helium::containers::IsIncognitoTab(contents())) {
 +    return;
 +  }
+   // Skip navigations that are not in tab groups.
+   if (!local_tab_->GetGroup()) {
+     return;
 --- a/chrome/browser/ui/tabs/tab_data.cc
 +++ b/chrome/browser/ui/tabs/tab_data.cc
-@@ -49 +49,3 @@
+@@ -46,7 +46,9 @@
+         Profile::FromBrowserContext(
+             tab_interface->GetContents()->GetBrowserContext()),
+         container_id);
 -    const auto name = container
 +    const auto name = helium::containers::IsIncognitoContainerId(container_id)
 +                          ? l10n_util::GetStringUTF16(IDS_CONTAINER_INCOGNITO)
 +                      : container
+                           ? helium::containers::GetIcon(container->icon) +
+                                 u" " + container->name
+                           : l10n_util::GetStringUTF16(IDS_CONTAINER_DELETED);
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -763,2 +763,7 @@
+@@ -760,8 +760,13 @@
+     views::View::OnPaint(canvas);
+   }
+   if (tab_data_.container_color) {
 -    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
 -                     *tab_data_.container_color);
 +    cc::PaintFlags flags;
@@ -836,24 +1190,48 @@
 +    canvas->DrawRoundRect(
 +        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
 +        1, flags);
+   }
+ }
+ 
 --- a/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
 +++ b/chrome/browser/ui/views/tabs/new_tab_button_menu_model.cc
-@@ -11,0 +12 @@
+@@ -9,6 +9,7 @@
+ 
+ #include "base/metrics/user_metrics.h"
+ #include "chrome/app/chrome_command_ids.h"
 +#include "chrome/browser/containers/container_service.h"
-@@ -40,0 +42,3 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+@@ -38,6 +39,9 @@
+   AddItemWithStringId(IDC_NEW_TAB, IDS_NEW_TAB);
+   SetElementIdentifierAt(GetIndexOfCommandId(IDC_NEW_TAB).value(), kNewTab);
+   if (!browser_->GetProfile()->IsOffTheRecord()) {
 +    AddItemWithStringId(IDC_NEW_INCOGNITO_TAB, IDS_CONTAINER_NEW_INCOGNITO);
 +    SetEnabledAt(GetIndexOfCommandId(IDC_NEW_INCOGNITO_TAB).value(),
 +                 helium::containers::IsEnabled(browser_->GetProfile()));
-@@ -60,0 +65,6 @@
+     container_menu_ = helium::containers::CreateContainerMenu(browser_);
+     AddSubMenuWithStringId(IDC_NEW_CONTAINER_TAB, IDS_CONTAINER_NEW_TAB,
+                            container_menu_.get());
+@@ -58,6 +62,12 @@
+ 
+ void NewTabButtonMenuModel::ExecuteCommand(int command_id, int event_flags) {
+   CHECK(browser_);
 +
 +  if (command_id == IDC_NEW_INCOGNITO_TAB) {
 +    helium::containers::OpenInContainer(
 +        browser_, {}, helium::containers::kNewIncognitoContainer);
 +    return;
 +  }
+ 
+   switch (command_id) {
+     case IDC_NEW_TAB:
 --- a/chrome/browser/ui/views/tabs/tab.cc
 +++ b/chrome/browser/ui/views/tabs/tab.cc
-@@ -900,2 +900,7 @@
+@@ -897,8 +897,13 @@
+ void Tab::OnPaint(gfx::Canvas* canvas) {
+   tab_style_views()->PaintTab(canvas);
+   if (data_.container_color) {
 -    canvas->FillRect(gfx::Rect(8, height() - 3, std::max(0, width() - 16), 3),
 -                     *data_.container_color);
 +    cc::PaintFlags flags;
@@ -863,9 +1241,15 @@
 +    canvas->DrawRoundRect(
 +        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
 +        1, flags);
+   }
+ }
+ 
 --- a/components/sessions/core/tab_restore_service_client.h
 +++ b/components/sessions/core/tab_restore_service_client.h
-@@ -74,0 +75,7 @@
+@@ -72,6 +72,13 @@
+   // Returns whether a given URL should be tracked for restoring.
+   virtual bool ShouldTrackURLForRestore(const GURL& url) = 0;
+ 
 +  // Whether a closed tab's metadata may be persisted to disk. Memory-only
 +  // entries remain available to the in-process reopen buffer.
 +  virtual bool ShouldPersistTab(
@@ -873,9 +1257,15 @@
 +    return true;
 +  }
 +
+   // Returns the extension app ID for the given LiveTab, or the empty string
+   // if there is no such ID (e.g., if extensions are not supported by the
+   // embedder).
 --- a/components/sessions/core/tab_restore_service_impl.cc
 +++ b/components/sessions/core/tab_restore_service_impl.cc
-@@ -957,0 +958,7 @@
+@@ -955,8 +955,15 @@
+     const tab_restore::Group& group) {
+   DCHECK(!group.tabs.empty());
+ 
 +  const size_t persistable_tabs =
 +      std::ranges::count_if(group.tabs, [this](const auto& tab) {
 +        return GetSelectedNavigationIndexToPersist(*tab) != -1;
@@ -883,16 +1273,28 @@
 +  if (persistable_tabs == 0) {
 +    return;
 +  }
-@@ -959 +966 @@
+   command_storage_manager_->ScheduleCommand(CreateGroupCommand(
 -      group.id, group.tabs.size(), group.group_id, group.saved_group_id,
 +      group.id, persistable_tabs, group.group_id, group.saved_group_id,
-@@ -1211,0 +1219,3 @@
+       group.browser_id, group.visual_data, group.timestamp));
+   ScheduleCommandsForTabs(group.tabs);
+ }
+@@ -1209,6 +1216,9 @@
+ 
+ int TabRestoreServiceImpl::PersistenceDelegate::
+     GetSelectedNavigationIndexToPersist(const tab_restore::Tab& tab) {
 +  if (!client_->ShouldPersistTab(tab.extra_data)) {
 +    return -1;
 +  }
+   const std::vector<SerializedNavigationEntry>& navigations = tab.navigations;
+   int selected_index = tab.current_navigation_index;
+   int max_index = static_cast<int>(navigations.size());
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -5634,0 +5635,8 @@
+@@ -5632,6 +5632,14 @@
+   SiteInstanceImpl* source_site_instance = opener->GetSiteInstance();
+   const auto& partition_config =
+       source_site_instance->GetSecurityPrincipal().GetStoragePartitionConfig();
 +  // Helium's temporary tab identities are independent for new windows/tabs.
 +  // Cloning is handled separately by Clone(), which intentionally shares one.
 +  const bool independent_incognito =
@@ -901,7 +1303,13 @@
 +      params.disposition != WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
 +  const bool suppress_opener =
 +      params.opener_suppressed || independent_incognito;
-@@ -5683 +5691,8 @@
+ 
+   {
+     StoragePartition* partition =
+@@ -5680,7 +5688,14 @@
+   // if the opener is being suppressed, we need to ensure that the new
+   // SiteInstance is created in a new BrowsingInstance.
+   scoped_refptr<SiteInstance> site_instance;
 -  if (params.opener_suppressed) {
 +  if (independent_incognito) {
 +    site_instance = SiteInstance::CreateForFixedStoragePartition(
@@ -911,7 +1319,13 @@
 +            "incognito-" + base::Uuid::GenerateRandomV4().AsLowercaseString(),
 +            /*in_memory=*/true));
 +  } else if (suppress_opener) {
-@@ -5703,4 +5718,3 @@
+     if (is_guest) {
+       // For guests, noopener windows can be created in a new BrowsingInstance
+       // as long as they preserve the guest's StoragePartition.
+@@ -5700,10 +5715,9 @@
+ 
+   if (is_guest && base::FeatureList::IsEnabled(features::kGuestViewMPArch)) {
+     if (auto* guest = GuestPageHolderImpl::FromRenderFrameHost(*opener)) {
 -      return guest->CreateNewWindow(
 -          params.disposition, params.target_url, params.frame_name,
 -          std::move(site_instance),
@@ -919,22 +1333,55 @@
 +      return guest->CreateNewWindow(params.disposition, params.target_url,
 +                                    params.frame_name, std::move(site_instance),
 +                                    !suppress_opener ? opener : nullptr);
-@@ -5717 +5731 @@
+     }
+     return nullptr;
+   }
+@@ -5714,7 +5728,7 @@
+   create_params.main_frame_name = params.frame_name;
+   create_params.opener_id =
+       GlobalRenderFrameHostId(render_process_id, opener->GetRoutingID());
 -  create_params.opener_suppressed = params.opener_suppressed;
 +  create_params.opener_suppressed = suppress_opener;
-@@ -5739 +5753 @@
+   create_params.initially_hidden = renderer_started_hidden;
+   create_params.initial_popup_url = params.target_url;
+ 
+@@ -5736,7 +5750,7 @@
+   // TODO(crbug.com/40234240): Instead of filtering out the guest case here,
+   // check it and drop prerender requests before starting prerendering.
+   std::unique_ptr<WebContentsImpl> new_contents;
 -  if (!is_guest) {
 +  if (!is_guest && !independent_incognito) {
-@@ -5764,2 +5778,4 @@
+     new_contents =
+         GetPrerenderHostRegistry()->TakePreCreatedWebContentsForNewTabIfExists(
+             params, create_params);
+@@ -5761,8 +5775,10 @@
+       new_contents =
+           GetBrowserPluginGuest()->CreateNewGuestWindow(create_params);
+     }
 -    new_contents->GetController().SetSessionStorageNamespace(
 -        partition_config, session_storage_namespace);
 +    if (!independent_incognito) {
 +      new_contents->GetController().SetSessionStorageNamespace(
 +          partition_config, session_storage_namespace);
 +    }
-@@ -5786 +5802 @@
+   }
+ 
+   auto* new_contents_impl = new_contents.get();
+@@ -5783,7 +5799,7 @@
+ 
+   // Save the window for later if we're not suppressing the opener (since it
+   // will be shown immediately).
 -  if (!params.opener_suppressed) {
 +  if (!suppress_opener) {
-@@ -5830 +5846 @@
+     if (!is_guest) {
+       WebContentsView* new_view = new_contents_impl->view_.get();
+ 
+@@ -5827,7 +5843,7 @@
+                              false,  // started_from_context_menu
+                              true);  // renderer_initiated
+ 
 -  if (!params.opener_suppressed) {
 +  if (!suppress_opener) {
+     return &new_contents_impl->GetPrimaryFrameTree();
+   }
+ 

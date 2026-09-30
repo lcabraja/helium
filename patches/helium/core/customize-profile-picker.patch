@@ -1,18 +1,33 @@
 --- a/chrome/app/generated_resources.grd
 +++ b/chrome/app/generated_resources.grd
-@@ -20138,0 +20139,3 @@
+@@ -20597,6 +20597,9 @@
+     <message name="IDS_CONTAINER_DONE" desc="Helium container tabs: done">Done</message>
+     <message name="IDS_CONTAINER_INVALID_NAME" desc="Helium container tabs: invalid name">Enter a name between 1 and 64 characters. You can create up to 500 containers.</message>
+     <message name="IDS_CONTAINER_CLOSE_PENDING" desc="Helium container tabs: close pending">Finish closing the container tabs, then try again. Site data has not been deleted.</message>
 +      <message name="IDS_CUSTOMIZE_SHOW_PROFILE_PICKER" desc="Toggle for showing the profile menu button in the toolbar.">
 +        Show profile picker
 +      </message>
+     <message name="IDS_CONTAINER_INCOGNITO" desc="Menu choice for a tab with its own temporary cookies and site data">Incognito tab</message>
+     <message name="IDS_CONTAINER_NEW_INCOGNITO" desc="New tab with its own temporary cookies and site data">New incognito tab</message>
+     <message name="IDS_CONTAINER_DELETED" desc="Helium container tabs: deleted">Deleted container</message>
 --- a/chrome/browser/resources/side_panel/customize_chrome/appearance.css
 +++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.css
-@@ -123 +123,2 @@
+@@ -120,7 +120,8 @@
+   --cr-icon-image: url('chrome://resources/images/open_in_new.svg');
+ }
+ 
 -#followThemeToggle {
 +#followThemeToggle,
 +#profilePickerToggle {
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
 --- a/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
 +++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
-@@ -51,0 +52,8 @@
+@@ -49,6 +49,14 @@
+     $i18n{resetToDefaultButtonLabel}
+   </cr-button>
+ </div>
 +<div id="profilePickerToggle" class="sp-card-content">
 +  <div id="profilePickerToggleTitle">$i18n{showProfilePicker}</div>
 +  <cr-toggle id="profilePickerToggleControl"
@@ -21,42 +36,102 @@
 +      @change="${this.onProfilePickerToggleChange_}">
 +  </cr-toggle>
 +</div>
+ ${this.showManagedDialog_ ? html`
+   <managed-dialog @close="${this.onManagedDialogClose_}"
+       title="$i18n{managedColorsTitle}"
 --- a/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
 +++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.ts
-@@ -37,0 +38 @@
+@@ -35,6 +35,7 @@
+     thirdPartyThemeLinkButton: HTMLButtonElement,
+     followThemeToggle: HTMLElement,
+     followThemeToggleControl: CrToggleElement,
 +    profilePickerToggleControl: CrToggleElement,
-@@ -58,0 +60 @@
+   };
+ }
+ 
+@@ -56,6 +57,7 @@
+   static override get properties() {
+     return {
+       theme_: {type: Object},
 +      profilePickerVisible_: {type: Boolean},
-@@ -95,0 +98 @@
+       editThemeButtonText_: {type: String},
+ 
+       thirdPartyThemeId_: {
+@@ -93,6 +95,7 @@
+   }
+ 
+   protected accessor theme_: Theme|undefined;
 +  protected accessor profilePickerVisible_: boolean = true;
-@@ -126,0 +130,2 @@
+   protected accessor editThemeButtonText_: string = '';
+   protected accessor thirdPartyThemeId_: string|null = null;
+   protected accessor thirdPartyThemeName_: string|null = null;
+@@ -124,6 +127,8 @@
+     super.connectedCallback();
+ 
+     this.listenerIds_ = [
 +      this.apiProxy_.callbackRouter.setProfilePickerVisibility.addListener(
 +          visible => { this.profilePickerVisible_ = visible; }),
-@@ -141,0 +147 @@
+       this.apiProxy_.callbackRouter.setTheme.addListener(theme => {
+         this.theme_ = theme;
+       }),
+@@ -139,6 +144,7 @@
+     ];
+ 
+     this.apiProxy_.handler.updateTheme();
 +    this.apiProxy_.handler.updateProfilePickerVisibility();
-@@ -199,0 +206,4 @@
+     this.apiProxy_.handler.updateAttachedTabState();
+     this.apiProxy_.handler.updateNtpManagedByName();
+   }
+@@ -197,6 +203,10 @@
+     }
+   }
+ 
 +  protected onProfilePickerToggleChange_(event: CustomEvent<boolean>) {
 +    this.apiProxy_.handler.setProfilePickerVisibility(event.detail);
 +  }
 +
+   focusOnThemeButton() {
+     this.$.editThemeButton.focus();
+   }
 --- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
 +++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
-@@ -164,0 +165,3 @@
+@@ -162,6 +162,9 @@
+ 
+   // Triggers a call to |CustomizeChromePage.SetTheme()|.
+   UpdateTheme();
 +
 +  UpdateProfilePickerVisibility();
 +  SetProfilePickerVisibility(bool visible);
-@@ -258,0 +262,2 @@
+ 
+   // Triggers a call to |CustomizeChromePage.SetThemeEditable()|.
+   UpdateThemeEditable(bool is_theme_editable);
+@@ -256,6 +259,8 @@
+ 
+   // Sets the current theme.
+   SetTheme(Theme theme);
 +
 +  SetProfilePickerVisibility(bool visible);
+   // Sets whether edit theme should be enabled.
+   SetThemeEditable(bool is_theme_editable);
+   // Scrolls side panel to |section|. Possibly a response to a call to
 --- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
 +++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
-@@ -135,0 +136,5 @@
+@@ -133,6 +133,11 @@
+ 
+   pref_change_registrar_.Init(profile_->GetPrefs());
+   pref_change_registrar_.Add(
 +      prefs::kShowAvatarButton,
 +      base::BindRepeating(
 +          &CustomizeChromePageHandler::UpdateProfilePickerVisibility,
 +          base::Unretained(this)));
 +  pref_change_registrar_.Add(
-@@ -329,0 +335,9 @@
+       prefs::kNtpModulesVisible,
+       base::BindRepeating(&CustomizeChromePageHandler::UpdateModulesSettings,
+                           base::Unretained(this)));
+@@ -327,6 +332,15 @@
+   }
+ }
+ 
 +void CustomizeChromePageHandler::UpdateProfilePickerVisibility() {
 +  page_->SetProfilePickerVisibility(
 +      profile_->GetPrefs()->GetBoolean(prefs::kShowAvatarButton));
@@ -66,12 +141,27 @@
 +  profile_->GetPrefs()->SetBoolean(prefs::kShowAvatarButton, visible);
 +}
 +
+ void CustomizeChromePageHandler::UpdateTheme() {
+   if (ntp_custom_background_service_) {
+     ntp_custom_background_service_->RefreshBackgroundIfNeeded();
 --- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
 +++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
-@@ -127,0 +128,2 @@
+@@ -125,6 +125,8 @@
+       ChooseLocalCustomBackgroundCallback callback) override;
+   void RemoveBackgroundImage() override;
+   void UpdateTheme() override;
 +  void UpdateProfilePickerVisibility() override;
 +  void SetProfilePickerVisibility(bool visible) override;
+   void UpdateThemeEditable(bool is_theme_editable) override;
+   void OpenChromeWebStore() override;
+   void OpenThirdPartyThemePage(const std::string& theme_id) override;
 --- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
 +++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
-@@ -106,0 +107 @@
+@@ -104,6 +104,7 @@
+       {"title", IDS_SIDE_PANEL_CUSTOMIZE_CHROME_TITLE},
+       // Header strings.
+       {"appearanceHeader", IDS_NTP_CUSTOMIZE_APPEARANCE_LABEL},
 +      {"showProfilePicker", IDS_CUSTOMIZE_SHOW_PROFILE_PICKER},
+       {"cardsHeader", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
+       {"categoriesHeader", IDS_NTP_CUSTOMIZE_THEMES_HEADER},
+       {"footerHeader", IDS_NTP_CUSTOMIZE_FOOTER_HEADER},
