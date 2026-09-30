@@ -14,6 +14,8 @@ jobs:
       with:
         python-version: '3.13'
     - run: python3 ./devutils/lint.py
+    - name: Check local release publisher
+      run: python3 -m unittest discover -s packaging/macos -p 'test_*.py'
 
   i18n:
     runs-on: ubuntu-latest

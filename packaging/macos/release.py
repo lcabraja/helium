@@ -270,6 +270,11 @@ class Release:
                      f"Helium Fork {metadata['display_version']} · build {number}", '--notes-file', notes)
             self.run('gh', 'release', 'upload', metadata['tag'], *assets, '--repo', repo)
         elif release['draft']:
+            if release['target_commitish'] != metadata['source_revision']:
+                raise ValueError('This draft belongs to another source commit; allocate a new build')
+            for asset in release.get('assets', []):
+                if asset['name'] == archive.name and asset.get('digest') != 'sha256:' + metadata['archive_sha256']:
+                    raise ValueError('Another build already uploaded this archive name; do not replace it')
             self.run('gh', 'release', 'upload', metadata['tag'], *assets, '--repo', repo, '--clobber')
         # A retry after a Pages failure reuses the public archive unchanged.
         # Publishing the archive first prevents clients receiving a feed with

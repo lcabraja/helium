@@ -89,6 +89,22 @@ class ReleaseTests(unittest.TestCase):
                 release.publish({}, root / 'new.zip', root / 'new.xml', root / 'notes.md')
             release.api.assert_not_called()
 
+    def test_draft_from_another_commit_cannot_be_overwritten(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            release = Release({'repository': 'lcabraja/helium', 'pages_branch': 'gh-pages',
+                               'update_origin': 'https://lcabraja.github.io/helium/'}, root, root, 1)
+            release.site = root
+            release.run = Mock(return_value='')
+            release.api = Mock(return_value=[{'tag_name': 'macos-2', 'draft': True,
+                                             'target_commitish': 'other'}])
+            with self.assertRaisesRegex(ValueError, 'another source commit'):
+                release.publish({'tag': 'macos-2', 'source_revision': 'ours',
+                                 'display_version': '0.18.1.1', 'build_number': 2},
+                                root / 'new.zip', root / 'new.xml', root / 'notes.md')
+            self.assertFalse(any(call.args[:3] == ('gh', 'release', 'upload')
+                                 for call in release.run.call_args_list))
+
 
 if __name__ == '__main__':
     unittest.main()
