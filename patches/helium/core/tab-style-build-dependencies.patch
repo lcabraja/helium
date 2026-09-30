@@ -1,0 +1,14 @@
+--- a/chrome/browser/ui/views/tabs/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/BUILD.gn
+@@ -200,9 +200,11 @@
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:color_headers",
++    "//chrome/browser/ui/helium:helium_layout_state_controller",
+     "//chrome/browser/ui/tabs",
+     "//chrome/browser/ui/views/tabs/common:impl",
+     "//chrome/browser/ui/views/tabs/tab",
++    "//chrome/browser/ui/web_applications",
+     "//skia",
+     "//ui/base",
+     "//ui/gfx",

@@ -237,3 +237,13 @@ scrolls to the final row and allows editing that row. The final icon picker has
 seven options, and a container's top line matches the tab-group underline's
 thickness and rounded ends. Native visual checks used the horizontal layout;
 the shared tab-view implementation receives the same drawing change.
+
+
+## Container tab crest
+
+The container color follows the upper half of the tab's rounded outline. The
+visible stroke is two logical pixels wide and stays inside the tab background.
+Its two side endpoints fade to transparent over five logical pixels before the
+midpoint. This uses the actual tab shape in horizontal and vertical layouts,
+including pinned and collapsed tabs. Tab-group indicators keep their existing
+position and color.

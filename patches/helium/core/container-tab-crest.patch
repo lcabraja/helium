@@ -1,0 +1,111 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -760,13 +760,7 @@
+     views::View::OnPaint(canvas);
+   }
+   if (tab_data_.container_color) {
+-    cc::PaintFlags flags;
+-    flags.setAntiAlias(true);
+-    flags.setColor(*tab_data_.container_color);
+-    const int overlap = TabStyle::Get()->GetTabOverlap();
+-    canvas->DrawRoundRect(
+-        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
+-        1, flags);
++    tab_styling()->PaintContainerCrest(canvas, *tab_data_.container_color);
+   }
+ }
+ 
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -897,13 +897,7 @@
+ void Tab::OnPaint(gfx::Canvas* canvas) {
+   tab_style_views()->PaintTab(canvas);
+   if (data_.container_color) {
+-    cc::PaintFlags flags;
+-    flags.setAntiAlias(true);
+-    flags.setColor(*data_.container_color);
+-    const int overlap = TabStyle::Get()->GetTabOverlap();
+-    canvas->DrawRoundRect(
+-        gfx::RectF(overlap + 3, 0, std::max(0, width() - 2 * overlap - 3), 2),
+-        1, flags);
++    tab_style_views()->PaintContainerCrest(canvas, *data_.container_color);
+   }
+ }
+ 
+--- a/chrome/browser/ui/views/tabs/tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/tab_style_views.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/views/tabs/tab_style_views.h"
+ 
++#include <algorithm>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -12,10 +13,15 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "cc/paint/paint_flags.h"
++#include "cc/paint/paint_shader.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/tabs/horizontal_tab_style_views.h"
+ #include "chrome/browser/ui/views/tabs/vertical_tab_style_views.h"
++#include "third_party/skia/include/core/SkPath.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/color_utils.h"
++#include "ui/gfx/scoped_canvas.h"
+ 
+ // static
+ std::u16string ui::metadata::TypeConverter<TabStyle::TabColors>::ToString(
+@@ -74,3 +80,38 @@
+ TabStyleViews::TabStyleViews() : tab_style_(TabStyle::Get()) {}
+ 
+ TabStyleViews::~TabStyleViews() = default;
++
++void TabStyleViews::PaintContainerCrest(gfx::Canvas* canvas, SkColor color) const {
++  const SkPath outline = GetPath(
++      TabStyle::PathType::kHighlight, canvas->image_scale(),
++      {.render_units = TabStyle::RenderUnits::kDips,
++       .should_paint_extension = false});
++  const SkRect bounds = outline.getBounds();
++  if (bounds.isEmpty()) {
++    return;
++  }
++
++  // Follow the actual rounded tab, including pinned and vertical tabs. Clip a
++  // four-DIP stroke to its interior so the visible line is two DIPs wide.
++  gfx::ScopedCanvas scoped_canvas(canvas);
++  canvas->ClipPath(outline, true);
++
++  // Fade the two side endpoints over the last five DIPs above the midpoint.
++  // Clamping to transparent below it also hides the entire lower outline.
++  const float midpoint = bounds.centerY();
++  const SkPoint points[] = {
++      SkPoint::Make(0, std::max(bounds.top(), midpoint - 5.0f)),
++      SkPoint::Make(0, midpoint),
++  };
++  const SkColor4f colors[] = {
++      SkColor4f::FromColor(color),
++      SkColor4f::FromColor(SkColorSetA(color, SK_AlphaTRANSPARENT)),
++  };
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++  flags.setStyle(cc::PaintFlags::kStroke_Style);
++  flags.setStrokeWidth(4.0f);
++  flags.setShader(cc::PaintShader::MakeLinearGradient(
++      points, colors, /*pos=*/nullptr, 2, SkTileMode::kClamp));
++  canvas->DrawPath(outline, flags);
++}
+--- a/chrome/browser/ui/views/tabs/tab_style_views.h
++++ b/chrome/browser/ui/views/tabs/tab_style_views.h
+@@ -114,6 +114,9 @@
+   // Paints the tab.
+   virtual void PaintTab(gfx::Canvas* canvas) const = 0;
+ 
++  // Paints an inner container-color outline around the upper half of the tab.
++  void PaintContainerCrest(gfx::Canvas* canvas, SkColor color) const;
++
+   // Returns the insets to use for laying out tab contents.
+   virtual gfx::Insets GetContentsInsets() const = 0;
+ 
