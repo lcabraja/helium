@@ -1,0 +1,14 @@
+{
+  "repository": "lcabraja/helium",
+  "pages_branch": "gh-pages",
+  "update_origin": "https://lcabraja.github.io/helium/",
+  "bundle_id": "eu.cabraja.helium",
+  "profile_directory": "eu.cabraja.helium",
+  "certificate_sha1": "65FA36C7AFBD931B674C7740EF29897DD555D42A",
+  "team_id": "GJP8JC4Y23",
+  "notary_profile": "helium-fork",
+  "sparkle_account": "eu.cabraja.helium",
+  "sparkle_public_key": "9/YmAifCBamOLhPDAfxgWtJJuLpqlpZ0KtesSU9MpQY=",
+  "sparkle_tools_version": "2.10.0",
+  "sparkle_tools_sha256": "c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
+}

@@ -25,7 +25,7 @@ def run(*command, capture=False):
     return result.stdout if capture else None
 
 
-def configure_bundle(app, bundle_id, profile_dir):
+def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=None):
     """Give the outer app and its helpers a consistent fork identity."""
     outer = app / 'Contents/Info.plist'
     original_id = plistlib.loads(outer.read_bytes())['CFBundleIdentifier']
@@ -40,6 +40,15 @@ def configure_bundle(app, bundle_id, profile_dir):
             info['CFBundleDisplayName'] = 'Helium Fork'
             info['CFBundleName'] = 'Helium Fork'
             info['CrProductDirName'] = profile_dir
+            if build_number:
+                info['CFBundleVersion'] = str(build_number)
+                info['KSVersion'] = str(build_number)
+            if feed_url:
+                info['SUFeedURL'] = feed_url
+                info['SUEnableAutomaticChecks'] = True
+                info['SUAutomaticallyUpdate'] = True
+                info['SUVerifyUpdateBeforeExtraction'] = True
+                info['SURequireSignedFeed'] = True
         path.write_bytes(plistlib.dumps(info))
 
 
@@ -47,6 +56,7 @@ def signing_plan(source, source_app, app, bundle_id):
     """Read the code-object manifest from the matching patched Chromium tree."""
     sys.path.insert(0, str(source / 'chrome/installer/mac'))
     from signing import parts # pylint: disable=import-outside-toplevel,import-error
+    from signing.model import CodeSignedProduct, CodeSignOptions
 
     framework = app / 'Contents/Frameworks/Helium Framework.framework'
     config = SimpleNamespace(app_product=app.stem,
@@ -62,9 +72,19 @@ def signing_plan(source, source_app, app, bundle_id):
     # containing framework, matching Chromium's signing.parts.sign_chrome().
     ordered = [(name, part) for name, part in objects.items()
                if name not in ('app', 'framework', 'privileged-helper')]
-    if (framework / 'Frameworks/Sparkle.framework').exists():
-        raise ValueError('Sparkle is not supported by this packager yet; '
-                         'add its nested updater objects before enabling it')
+    sparkle = framework / 'Frameworks/Sparkle.framework'
+    if sparkle.exists():
+        # The matching platform build disables Sparkle's optional XPC services.
+        # Refuse an unexpected layout rather than ship unsigned nested code.
+        if list(sparkle.rglob('*.xpc')):
+            raise ValueError('This packager expects Sparkle without XPC services')
+        for name, identifier in (
+                ('Autoupdate', 'org.sparkle-project.Sparkle.Autoupdate'),
+                ('Updater.app', 'org.sparkle-project.Sparkle.Updater')):
+            ordered.append(('sparkle-' + name, CodeSignedProduct(
+                str(sparkle / 'Versions/Current' / name), identifier,
+                options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS)))
+        ordered.append(('sparkle', CodeSignedProduct(str(sparkle), 'org.sparkle-project.Sparkle')))
     ordered += [('framework', objects['framework']), ('app', objects['app'])]
     plan = []
     for name, part in ordered:
@@ -99,6 +119,10 @@ def main():
     parser.add_argument('--team-id', required=True)
     parser.add_argument('--bundle-id', default='eu.cabraja.helium')
     parser.add_argument('--profile-dir', default='eu.cabraja.helium')
+    parser.add_argument('--build-number', type=int, help='Increasing Sparkle build version')
+    parser.add_argument('--feed-url', help='HTTPS Sparkle appcast URL')
+    parser.add_argument('--public-key', help='Expected public Sparkle Ed25519 key')
+    parser.add_argument('--archive-name', default='Helium-Fork-arm64.zip')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--notary-profile', help='Existing notarytool Keychain profile')
     mode.add_argument('--sign-only', action='store_true', help='Leave notarization pending')
@@ -112,12 +136,26 @@ def main():
         parser.error('Invalid bundle identifier')
     if not re.fullmatch(r'[A-Za-z0-9._-]+', args.profile_dir):
         parser.error('Profile directory must be a single directory name')
+    if args.build_number is not None and args.build_number < 1:
+        parser.error('Build number must be positive')
+    if args.feed_url and not args.feed_url.startswith('https://'):
+        parser.error('The update feed must use HTTPS')
+    if not re.fullmatch(r'[A-Za-z0-9._-]+\.zip', args.archive_name):
+        parser.error('Archive name must be a ZIP filename')
 
     source = args.chromium_src.resolve()
     source_app = args.source_app.resolve()
     output = args.output_dir.resolve()
     if not (source_app / 'Contents/MacOS/Helium').is_file():
         parser.error('Source must be a built Helium application')
+    source_info = plistlib.loads((source_app / 'Contents/Info.plist').read_bytes())
+    if args.feed_url:
+        if not args.public_key or source_info.get('SUPublicEDKey') != args.public_key:
+            parser.error('The built app does not contain the expected Sparkle public key')
+        if not (source_app / 'Contents/Frameworks/Helium Framework.framework/Frameworks/Sparkle.framework').exists():
+            parser.error('The built app does not contain Sparkle')
+        if not args.build_number:
+            parser.error('An updater release requires --build-number')
     if output.exists():
         parser.error('Output directory already exists; refusing to replace it')
     identities = run('/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning', capture=True)
@@ -130,7 +168,7 @@ def main():
     output.mkdir(parents=True)
     app = output / 'Helium Fork.app'
     run('/usr/bin/ditto', source_app, app)
-    configure_bundle(app, args.bundle_id, args.profile_dir)
+    configure_bundle(app, args.bundle_id, args.profile_dir, args.build_number, args.feed_url)
     plan = signing_plan(source, source_app, app, args.bundle_id)
     if args.plan_only:
         print(f'Validated {len(plan)} signing objects; app staged but not signed')
@@ -177,14 +215,14 @@ def main():
         notarized = True
         submission.unlink()
 
-    archive = output / 'Helium-Fork-arm64.zip'
+    archive = output / args.archive_name
     run('/usr/bin/ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', app, archive)
     hasher = hashlib.sha256()
     with archive.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             hasher.update(chunk)
     digest = hasher.hexdigest()
-    (output / 'Helium-Fork-arm64.sha256').write_text(f'{digest}  {archive.name}\n')
+    archive.with_suffix('.sha256').write_text(f'{digest}  {archive.name}\n')
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     metadata = {
         'app': str(app),
@@ -194,6 +232,8 @@ def main():
         'team_id': args.team_id,
         'certificate_sha1': args.identity.upper(),
         'version': info['CFBundleVersion'],
+        'display_version': info.get('CFBundleShortVersionString'),
+        'feed_url': info.get('SUFeedURL'),
         'notarized': notarized,
         'archive_sha256': digest
     }

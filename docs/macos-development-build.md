@@ -215,17 +215,20 @@ python3 packaging/macos/sign_app.py \
 ```
 
 The script copies the app, applies consistent outer and helper bundle IDs, and
-signs nested code before its containing framework and application. It reads the
+signs nested code before its containing framework and application. Sparkle
+releases also sign its Autoupdate and Updater.app helpers before the Sparkle
+framework. It reads the
 matching Chromium signing manifest and entitlement files. It rejects ad-hoc
 identities and release entitlements that allow debugging. It verifies the whole
 bundle, submits it to Apple, staples the accepted ticket, checks Gatekeeper and
 creates a ZIP, SHA-256 file and package metadata.
 
 `--sign-only` explicitly leaves notarization pending and records that state in
-the metadata. A signed-only build is not a notarized release. The current script
-packages Apple Silicon builds without Sparkle; it rejects a bundled Sparkle
-framework until its updater signing is implemented. Automatic updates remain
-disabled in this development configuration.
+the metadata. A signed-only build is not a notarized release. The base development
+configuration leaves Sparkle disabled. The local release command enables it and
+publishes signed updates through GitHub Releases and Pages. See
+[`packaging/macos/README.md`](../packaging/macos/README.md) for the one-command
+release procedure and recovery options.
 
 Replace the installed `Helium Fork.app` after quitting it. Reuse the same bundle
 identifier and team on every build. macOS may request access again when moving

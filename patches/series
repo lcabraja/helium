@@ -379,3 +379,5 @@ helium/core/container-tabs-incognito.patch
 helium/core/customize-profile-picker.patch
 helium/core/container-tab-crest.patch
 helium/core/tab-style-build-dependencies.patch
+
+helium/core/fork-update-server.patch

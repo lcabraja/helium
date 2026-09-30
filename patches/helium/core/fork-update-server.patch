@@ -1,0 +1,36 @@
+--- a/components/helium_services/BUILD.gn
++++ b/components/helium_services/BUILD.gn
+@@ -1,6 +1,11 @@
+ # Copyright 2025 The Helium Authors
+ # You can use, redistribute, and/or modify this source code under
+ # the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++declare_args() {
++  # Optional fork update server; unrelated Helium services keep their defaults.
++  helium_browser_update_origin = ""
++}
+ 
+ component("helium_services") {
+   sources = [
+@@ -19,4 +24,7 @@
+   ]
+ 
+   defines = [ "IS_HELIUM_IMPL" ]
++  if (helium_browser_update_origin != "") {
++    defines += [ "HELIUM_BROWSER_UPDATE_ORIGIN=\"$helium_browser_update_origin\"" ]
++  }
+ }
+--- a/components/helium_services/helium_services_helpers.cc
++++ b/components/helium_services/helium_services_helpers.cc
+@@ -28,7 +28,11 @@
+ #endif
+ 
+ #if defined(UPDATES_SUPPORTED)
++#if defined(HELIUM_BROWSER_UPDATE_ORIGIN)
++constexpr std::string_view kUpdateBaseUrl = HELIUM_BROWSER_UPDATE_ORIGIN;
++#else
+ constexpr std::string_view kUpdateBaseUrl = "https://updates.helium.computer/";
++#endif
+ constexpr const char kUpdatePath[] =
+ #if BUILDFLAG(IS_MAC)
+     "mac/appcast-" CPU_ARCH_STR ".xml";
