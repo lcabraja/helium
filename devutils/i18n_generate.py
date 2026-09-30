@@ -93,36 +93,41 @@ def extract_strings_from_hunk(hunk, clean=False):
 
     for line in str(hunk).split('\n'):
         is_additive = line.startswith('+') or clean
-        is_subtractive = line.startswith('-')
-        line = line.lstrip('+')
-
-        if is_subtractive:
+        if not clean and line.startswith('-'):
             continue
-        if not name:
-            line = line.strip()
+        if not clean and line[:1] in ('+', ' '):
+            line = line[1:]
 
-        if line.startswith('<message') or meta_acc:
-            meta_acc += line
-        elif '</message>' in line:
-            if name and message and had_any_additive:
+        if line.lstrip().startswith('<message') or meta_acc:
+            meta_acc += line + '\n'
+            had_any_additive |= is_additive
+            opening_match = re.search(r"""<message\b(?:[^>"']|"[^"]*"|'[^']*')*>""", meta_acc)
+            if not opening_match:
+                continue
+            opening = opening_match.group(0)
+            line = meta_acc[opening_match.end():]
+            line = line.removesuffix('\n')
+            name = get_xml_attr(opening, 'name')
+            desc = get_xml_attr(opening, 'desc')
+            meaning = get_xml_attr(opening, 'meaning')
+            meta_acc = ''
+        elif not name:
+            continue
+
+        had_any_additive |= is_additive
+        if '</message>' in line:
+            message += line.split('</message>', 1)[0]
+            if name and message.strip() and had_any_additive:
                 yield name, desc, meaning, message.strip()
             name, message, desc, meaning = None, '', None, None
             had_any_additive = False
-        elif name:
+        else:
             message += line + '\n'
-
-        if meta_acc and line.endswith('>'):
-            name = get_xml_attr(meta_acc, 'name')
-            desc = get_xml_attr(meta_acc, 'desc')
-            meaning = get_xml_attr(meta_acc, 'meaning')
-            meta_acc = ''
-
-        had_any_additive |= bool(name) and is_additive
 
 
 def to_source_format(path, name, desc, meaning, message):
     """Takes an extracted XML tuple and converts it to the JSON format."""
-    context = namesub.replace_text(desc)[0]
+    context = namesub.replace_text(desc or '')[0]
     message = namesub.replace_text(message)[0]
 
     entry = {

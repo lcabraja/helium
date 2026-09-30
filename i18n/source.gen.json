@@ -1297,6 +1297,240 @@
     "message": "Show loading progress in the address bar"
   },
   {
+    "name": "IDS_CONTAINER_PERSONAL",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: personal",
+    "message": "Personal"
+  },
+  {
+    "name": "IDS_CONTAINER_WORK",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: work",
+    "message": "Work"
+  },
+  {
+    "name": "IDS_CONTAINER_BANKING",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: banking",
+    "message": "Banking"
+  },
+  {
+    "name": "IDS_CONTAINER_SHOPPING",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: shopping",
+    "message": "Shopping"
+  },
+  {
+    "name": "IDS_CONTAINER_NEW_TAB",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: new tab",
+    "message": "New container tab"
+  },
+  {
+    "name": "IDS_CONTAINER_OPEN_LINK",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: open link",
+    "message": "Open link in new container tab"
+  },
+  {
+    "name": "IDS_CONTAINER_OPEN_MEDIA",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: open media",
+    "message": "Open media in new container tab"
+  },
+  {
+    "name": "IDS_CONTAINER_OPEN_IMAGE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: open image",
+    "message": "Open image in new container tab"
+  },
+  {
+    "name": "IDS_CONTAINER_OPEN",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: open",
+    "message": "Open"
+  },
+  {
+    "name": "IDS_CONTAINER_OPEN_TABS",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: open tabs",
+    "message": "Open in new container tab"
+  },
+  {
+    "name": "IDS_CONTAINER_REOPEN",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: reopen",
+    "message": "Reopen in container"
+  },
+  {
+    "name": "IDS_CONTAINER_NONE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: none",
+    "message": "No container"
+  },
+  {
+    "name": "IDS_CONTAINER_CHOOSE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: choose",
+    "message": "Container"
+  },
+  {
+    "name": "IDS_CONTAINER_MANAGE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: manage",
+    "message": "Manage containers"
+  },
+  {
+    "name": "IDS_CONTAINER_ADD",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: add",
+    "message": "Add container"
+  },
+  {
+    "name": "IDS_CONTAINER_EDIT",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: edit",
+    "message": "Edit"
+  },
+  {
+    "name": "IDS_CONTAINER_DELETE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: delete",
+    "message": "Delete container"
+  },
+  {
+    "name": "IDS_CONTAINER_NAME",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: name",
+    "message": "Name"
+  },
+  {
+    "name": "IDS_CONTAINER_COLOR",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: color",
+    "message": "Color"
+  },
+  {
+    "name": "IDS_CONTAINER_ICON",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: icon",
+    "message": "Icon"
+  },
+  {
+    "name": "IDS_CONTAINER_ENABLED",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: enabled",
+    "message": "Enable container tabs"
+  },
+  {
+    "name": "IDS_CONTAINER_ASK_NEW_TAB",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: ask new tab",
+    "message": "Select a container for each new tab"
+  },
+  {
+    "name": "IDS_CONTAINER_BLUE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: blue",
+    "message": "Blue"
+  },
+  {
+    "name": "IDS_CONTAINER_ORANGE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: orange",
+    "message": "Orange"
+  },
+  {
+    "name": "IDS_CONTAINER_GREEN",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: green",
+    "message": "Green"
+  },
+  {
+    "name": "IDS_CONTAINER_PINK",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: pink",
+    "message": "Pink"
+  },
+  {
+    "name": "IDS_CONTAINER_PURPLE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: purple",
+    "message": "Purple"
+  },
+  {
+    "name": "IDS_CONTAINER_RED",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: red",
+    "message": "Red"
+  },
+  {
+    "name": "IDS_CONTAINER_TURQUOISE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: turquoise",
+    "message": "Turquoise"
+  },
+  {
+    "name": "IDS_CONTAINER_GRAY",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: gray",
+    "message": "Gray"
+  },
+  {
+    "name": "IDS_CONTAINER_SAVE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: save",
+    "message": "Save"
+  },
+  {
+    "name": "IDS_CONTAINER_DONE",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: done",
+    "message": "Done"
+  },
+  {
+    "name": "IDS_CONTAINER_INVALID_NAME",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: invalid name",
+    "message": "Enter a name between 1 and 64 characters. You can create up to 100 containers."
+  },
+  {
+    "name": "IDS_CONTAINER_CLOSE_PENDING",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: close pending",
+    "message": "Finish closing the container tabs, then try again. Site data has not been deleted."
+  },
+  {
+    "name": "IDS_CONTAINER_DELETED",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: deleted",
+    "message": "Deleted container"
+  },
+  {
+    "name": "IDS_CONTAINER_DELETE_CONFIRM",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: delete confirm",
+    "message": "Close all tabs in <ph name=\"CONTAINER_NAME\">$1<ex>Work</ex></ph> and delete its cookies and site data? This cannot be undone."
+  },
+  {
+    "name": "IDS_CONTAINER_INVALID_NAME",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Helium container tabs: invalid name",
+    "message": "Enter a name between 1 and 64 characters. You can create up to 500 containers."
+  },
+  {
+    "name": "IDS_CONTAINER_INCOGNITO",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "Menu choice for a tab with its own temporary cookies and site data",
+    "message": "Incognito tab"
+  },
+  {
+    "name": "IDS_CONTAINER_NEW_INCOGNITO",
+    "source": "chrome/app/generated_resources.grd",
+    "context": "New tab with its own temporary cookies and site data",
+    "message": "New incognito tab"
+  },
+  {
     "name": "IDS_CUSTOMIZE_SHOW_PROFILE_PICKER",
     "source": "chrome/app/generated_resources.grd",
     "context": "Toggle for showing the profile menu button in the toolbar.",
