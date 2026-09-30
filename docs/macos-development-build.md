@@ -48,9 +48,9 @@ or mix dependency versions to make configuration pass.
 4. Launch the built app with a separate development profile. Follow the UI and
    storage-isolation checks in `docs/container-tabs.md`. Record any check that
    could not run, rather than reporting it as passed.
-5. Use the platform's development/ad-hoc signing flow. Verify the app's signature
-   and bundled library paths. Do not use production signing identities or
-   notarization credentials unless separately authorized.
+5. Use the stable Developer ID packaging procedure below for this fork. Verify
+   the app's signature and bundled library paths. Use ad-hoc signing only for
+   disposable local tests, since it cannot preserve the installed app's identity.
 6. Commit and push any build fixes to the user's fork using a summary, detailed
    explanation and file-by-file commit body. Record the final commit in the app
    archive name and build report.
@@ -176,3 +176,58 @@ The appearance regression checks callback updates and preference changes. Native
 checks confirmed immediate hiding and persistence across a clean quit/restart.
 The app, chromedriver and focused tests build, and all 27 selected regression
 executions pass alongside the incognito/container changes.
+
+## Stable Developer ID packaging
+
+The fork uses bundle identifier `eu.cabraja.helium`, display name `Helium Fork`,
+and profile directory `~/Library/Application Support/eu.cabraja.helium`. Keep
+these values and the Apple team stable across releases. The separate profile
+avoids modifying the official Helium installation. Installing the fork does not
+migrate the official profile automatically. The browser's storage-key service is
+unchanged; do not delete or replace its Keychain item during installation.
+
+Create a Developer ID Application certificate through Xcode's Apple Accounts
+settings using the paid development team. Back up the certificate and matching
+private key together as an encrypted PKCS#12 file. Store its password separately
+in the password manager. Do not commit the private key, export password,
+notarization password or Keychain database. Import the same identity when moving
+to another build machine. A replacement certificate from the same team should
+retain the default designated requirement, but verify this before distributing a
+renewal.
+
+Build `chrome/installer/mac:mac` as well as `chrome` to generate the signing
+entitlements. Store notarization credentials interactively in macOS Keychain:
+
+```sh
+xcrun notarytool store-credentials helium-fork --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
+```
+
+Use an app-specific password at the prompt. Then package the compiled app:
+
+```sh
+python3 packaging/macos/sign_app.py \
+  --chromium-src /absolute/path/to/build/src \
+  --source-app /absolute/path/to/build/src/out/Default/Helium.app \
+  --output-dir /absolute/path/to/new-release-directory \
+  --identity CERTIFICATE_SHA1_FINGERPRINT \
+  --team-id YOUR_TEAM_ID \
+  --notary-profile helium-fork
+```
+
+The script copies the app, applies consistent outer and helper bundle IDs, and
+signs nested code before its containing framework and application. It reads the
+matching Chromium signing manifest and entitlement files. It rejects ad-hoc
+identities and release entitlements that allow debugging. It verifies the whole
+bundle, submits it to Apple, staples the accepted ticket, checks Gatekeeper and
+creates a ZIP, SHA-256 file and package metadata.
+
+`--sign-only` explicitly leaves notarization pending and records that state in
+the metadata. A signed-only build is not a notarized release. The current script
+packages Apple Silicon builds without Sparkle; it rejects a bundled Sparkle
+framework until its updater signing is implemented. Automatic updates remain
+disabled in this development configuration.
+
+Replace the installed `Helium Fork.app` after quitting it. Reuse the same bundle
+identifier and team on every build. macOS may request access again when moving
+from official Helium or an ad-hoc build to this identity. Stable signing does not
+transfer permissions granted to a different developer's application.
