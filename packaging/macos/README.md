@@ -30,6 +30,11 @@ Enable browser updates in Settings → Privacy and security → Helium services.
 Updates download in the background and install on quit or through the About
 page's relaunch button.
 
+Sparkle relaunches the app with its normal profile path. Command-line overrides
+such as `--user-data-dir` are not preserved by that relaunch. If you use a custom
+profile for testing, reopen the updated app with the same override. The update
+does not remove that profile's data.
+
 ## Requirements
 
 Use the prepared `helium-macos` platform workspace containing this repository
