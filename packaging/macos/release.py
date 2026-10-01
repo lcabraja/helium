@@ -71,6 +71,42 @@ class Release:
             command += ['--method', 'POST', '--input', str(payload_path)]
         return json.loads(self.run(*command, capture=True))
 
+    def pages_request(self, payload=None):
+        command = ['gh', 'api', f'repos/{self.config["repository"]}/pages']
+        if payload is not None:
+            payload_path = self.work / 'api-request.json'
+            payload_path.write_text(json.dumps(payload))
+            command += ['--method', 'POST', '--input', str(payload_path)]
+        if self.log:
+            self.log.write('$ ' + ' '.join(command) + '\n')
+            self.log.flush()
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode and self.log:
+            self.log.write(result.stderr)
+        return result
+
+    def ensure_pages(self):
+        expected = {'branch': self.config['pages_branch'], 'path': '/'}
+        result = self.pages_request()
+        if result.returncode and 'HTTP 404' in result.stderr:
+            created = self.pages_request({'source': expected, 'build_type': 'legacy'})
+            # GitHub can enable Pages between inspection and creation. Read
+            # its configuration again instead of treating that conflict as a
+            # failed publication or replacing an existing site's settings.
+            if created.returncode and 'HTTP 409' not in created.stderr:
+                raise RuntimeError('Could not enable GitHub Pages; see release.log')
+            for attempt in range(3):
+                result = self.pages_request()
+                if not result.returncode or 'HTTP 404' not in result.stderr:
+                    break
+                if attempt < 2:
+                    time.sleep(1)
+        if result.returncode:
+            raise RuntimeError('Could not inspect GitHub Pages; feed branch was pushed')
+        pages = json.loads(result.stdout)
+        if pages.get('source') != expected or pages.get('build_type') != 'legacy':
+            raise ValueError('Existing Pages source differs; refusing to replace another site')
+
     def preflight(self, allow_dirty=False):
         if sys.platform != 'darwin':
             raise ValueError('Local releases require macOS with Xcode')
@@ -331,16 +367,7 @@ class Release:
             self.run('git', '-C', self.site, 'commit', '-m', f'Publish Helium Fork macOS build {number}')
             # Never force-push the feed. A competing publication must be reviewed.
             self.run('git', '-C', self.site, 'push', 'origin', f'HEAD:refs/heads/{branch}')
-        pages_result = subprocess.run(['gh', 'api', f'repos/{repo}/pages'], capture_output=True, text=True)
-        if pages_result.returncode:
-            if '404' not in pages_result.stderr:
-                raise RuntimeError('Could not inspect GitHub Pages; feed branch was pushed')
-            self.api(f'repos/{repo}/pages', {'source': {'branch': branch, 'path': '/'},
-                                           'build_type': 'legacy'})
-        else:
-            pages = json.loads(pages_result.stdout)
-            if pages.get('source') != {'branch': branch, 'path': '/'}:
-                raise ValueError('Existing Pages source differs; refusing to replace another site')
+        self.ensure_pages()
         print('Waiting for GitHub Pages to serve the signed feed...', flush=True)
         deadline = time.monotonic() + 600
         while time.monotonic() < deadline:

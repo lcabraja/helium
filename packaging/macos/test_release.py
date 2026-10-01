@@ -3,6 +3,7 @@
 
 import subprocess
 import base64
+import json
 import shutil
 import tempfile
 import unittest
@@ -14,6 +15,40 @@ from release import Release, SPARKLE_NS, digest_config, feed_version
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_pages_creation_conflict_checks_the_existing_site(self):
+        root = Path('/unused')
+        release = Release({'update_origin': 'https://example.invalid/',
+                           'pages_branch': 'gh-pages'}, root, root, 1)
+        release.pages_request = Mock(side_effect=[
+            subprocess.CompletedProcess([], 1, '', 'HTTP 404'),
+            subprocess.CompletedProcess([], 1, '', 'HTTP 409'),
+            subprocess.CompletedProcess([], 0, json.dumps(
+                {'source': {'branch': 'gh-pages', 'path': '/'}, 'build_type': 'legacy'}), '')])
+        release.ensure_pages()
+        self.assertEqual(release.pages_request.call_count, 3)
+
+    def test_pages_creation_conflict_does_not_replace_another_site(self):
+        root = Path('/unused')
+        release = Release({'update_origin': 'https://example.invalid/',
+                           'pages_branch': 'gh-pages'}, root, root, 1)
+        release.pages_request = Mock(side_effect=[
+            subprocess.CompletedProcess([], 1, '', 'HTTP 404'),
+            subprocess.CompletedProcess([], 1, '', 'HTTP 409'),
+            subprocess.CompletedProcess([], 0, json.dumps(
+                {'source': {'branch': 'main', 'path': '/docs'}, 'build_type': 'legacy'}), '')])
+        with self.assertRaisesRegex(ValueError, 'refusing to replace'):
+            release.ensure_pages()
+        self.assertEqual(release.pages_request.call_count, 3)
+
+    def test_pages_inspection_failure_does_not_attempt_creation(self):
+        root = Path('/unused')
+        release = Release({'update_origin': 'https://example.invalid/',
+                           'pages_branch': 'gh-pages'}, root, root, 1)
+        release.pages_request = Mock(return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 403'))
+        with self.assertRaisesRegex(RuntimeError, 'Could not inspect'):
+            release.ensure_pages()
+        release.pages_request.assert_called_once_with()
+
     def test_key_file_rejects_permissions_accessible_to_other_users(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
