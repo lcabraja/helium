@@ -72,6 +72,10 @@ signs Autoupdate and Updater.app before Sparkle and the containing frameworks.
 # Publish a completed build after fixing a network or GitHub failure.
 ./packaging/macos/release.sh --publish-only /absolute/path/to/completed-run
 
+# Explicit fallback when macOS blocks unattended Keychain access.
+# Requires OpenSSL 3 and an exported Ed25519 seed with file mode 0600.
+./packaging/macos/release.sh --sparkle-key-file /private/path/to/key.txt
+
 # Replay source patches only, including uncommitted development changes.
 ./packaging/macos/release.sh --prepare-only
 
@@ -91,6 +95,10 @@ archives are immutable; retrying publication never replaces a public archive.
 The feed is updated only after the public archive passes its checksum check.
 A failed upload leaves the previous feed usable. A failed Pages deployment can
 be retried with `--publish-only`, without another build or notarization.
+The optional `--sparkle-key-file` also works with `--publish-only`. It validates
+the backup's public key against the app's embedded key before signing. The
+private file stays on the builder; only signatures are published. Keychain
+remains the default.
 
 The script takes a local lock and never force-pushes Pages. If another machine
 publishes a newer build, rebuild with the next allocated version. Keep the

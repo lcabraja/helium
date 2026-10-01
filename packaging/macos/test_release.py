@@ -2,6 +2,8 @@
 """Failure and source-integrity checks for the local publisher."""
 
 import subprocess
+import base64
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +14,28 @@ from release import Release, SPARKLE_NS, digest_config, feed_version
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_key_file_rejects_permissions_accessible_to_other_users(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            key = root / 'key.txt'
+            key.write_text(base64.b64encode(bytes(32)).decode())
+            key.chmod(0o644)
+            release = Release({'update_origin': 'https://example.invalid/'}, root, root, 1, key)
+            with self.assertRaisesRegex(ValueError, 'owner-only'):
+                release.verify_key_file()
+
+    @unittest.skipUnless(shutil.which('openssl'), 'OpenSSL required for key-file validation')
+    def test_wrong_key_file_cannot_sign_our_feed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            key = root / 'key.txt'
+            key.write_text(base64.b64encode(bytes(32)).decode())
+            key.chmod(0o600)
+            release = Release({'update_origin': 'https://example.invalid/',
+                               'sparkle_public_key': base64.b64encode(bytes(32)).decode()}, root, root, 1, key)
+            with self.assertRaisesRegex(ValueError, 'does not match'):
+                release.verify_key_file()
+
     def test_build_numbers_ignore_display_version(self):
         xml = f'<rss xmlns:sparkle="{SPARKLE_NS}"><channel><item><sparkle:version>12</sparkle:version><sparkle:shortVersionString>0.18.1.1</sparkle:shortVersionString></item><item><sparkle:version>9</sparkle:version></item></channel></rss>'
         self.assertEqual(feed_version(xml), 12)

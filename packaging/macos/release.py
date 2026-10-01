@@ -2,6 +2,7 @@
 """Build and publish a signed macOS fork release locally, without a CI build."""
 
 import argparse
+import base64
 import fcntl
 import hashlib
 import json
@@ -37,12 +38,13 @@ def feed_version(data):
 
 
 class Release:
-    def __init__(self, config, platform, work, jobs):
+    def __init__(self, config, platform, work, jobs, key_file=None):
         self.config = config
         self.platform = platform
         self.source = platform / 'build/src'
         self.work = work
         self.jobs = jobs
+        self.key_file = key_file.resolve() if key_file else None
         self.log = None
         self.site = None
         self.site_revision = None
@@ -117,11 +119,39 @@ class Release:
                     contents.extractall(staging, filter='data')
                 (staging / marker.name).write_text(expected + '\n')
                 staging.rename(directory)
-        public = self.run(directory / 'bin/generate_keys', '--account',
-                          self.config['sparkle_account'], '-p', capture=True).strip()
-        if public != self.config['sparkle_public_key']:
-            raise ValueError('Sparkle Keychain key does not match the embedded public key')
+        if self.key_file:
+            self.verify_key_file()
+        else:
+            public = self.run(directory / 'bin/generate_keys', '--account',
+                              self.config['sparkle_account'], '-p', capture=True).strip()
+            if public != self.config['sparkle_public_key']:
+                raise ValueError('Sparkle Keychain key does not match the embedded public key')
         return directory / 'bin'
+
+    def verify_key_file(self):
+        # A file is an explicit fallback for builders without unattended
+        # Keychain access. Check its public identity before generating a feed.
+        if self.key_file.stat().st_mode & 0o077:
+            raise ValueError('The private key file must have owner-only permissions')
+        seed = base64.b64decode(self.key_file.read_text().strip(), validate=True)
+        if len(seed) != 32:
+            raise ValueError('The private key file must contain a Sparkle Ed25519 seed')
+        openssl = Path('/opt/homebrew/opt/openssl@3/bin/openssl')
+        if not openssl.exists():
+            openssl = shutil.which('openssl')
+        if not openssl:
+            raise FileNotFoundError('Key-file validation requires OpenSSL 3')
+        # The secret is sent through stdin, never a process argument or log.
+        private_der = bytes.fromhex('302e020100300506032b657004220420') + seed
+        result = subprocess.run([str(openssl), 'pkey', '-inform', 'DER', '-pubout', '-outform', 'DER'],
+                                input=private_der, capture_output=True, check=True)
+        if base64.b64encode(result.stdout[-32:]).decode() != self.config['sparkle_public_key']:
+            raise ValueError('The private key file does not match the embedded public key')
+
+    def signing_args(self):
+        if self.key_file:
+            return ['--ed-key-file', str(self.key_file)]
+        return ['--account', self.config['sparkle_account']]
 
     def checkout_site(self):
         self.site = self.work / 'site'
@@ -233,10 +263,10 @@ class Release:
         elif feed.exists():
             feed.unlink()
         prefix = f"https://github.com/{self.config['repository']}/releases/download/{metadata['tag']}/"
-        self.run(tools / 'generate_appcast', '--account', self.config['sparkle_account'],
+        self.run(tools / 'generate_appcast', *self.signing_args(),
                  '--download-url-prefix', prefix, '--maximum-deltas', '0', '-o', feed, folder)
         # Verify the generated feed and archive signature using Sparkle itself.
-        self.run(tools / 'sign_update', '--account', self.config['sparkle_account'], '--verify', feed)
+        self.run(tools / 'sign_update', *self.signing_args(), '--verify', feed)
         root = ET.fromstring(feed.read_bytes())
         items = root.findall('./channel/item')
         item = next((item for item in items if item.findtext('{' + SPARKLE_NS + '}version')
@@ -248,7 +278,7 @@ class Release:
             raise ValueError('The feed download URL is incorrect')
         if int(enclosure.get('length', '0')) != archive.stat().st_size:
             raise ValueError('The feed download size is incorrect')
-        self.run(tools / 'sign_update', '--account', self.config['sparkle_account'], '--verify',
+        self.run(tools / 'sign_update', *self.signing_args(), '--verify',
                  archive, enclosure.get('{' + SPARKLE_NS + '}edSignature'))
         return feed
 
@@ -340,6 +370,8 @@ def main():
     parser.add_argument('--work-dir', type=Path, help='New output directory for this run')
     parser.add_argument('--jobs', type=int, default=10)
     parser.add_argument('--notes-file', type=Path, help='Public release notes, Markdown')
+    parser.add_argument('--sparkle-key-file', type=Path,
+                        help='Explicit owner-only private-key backup instead of Keychain signing')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--build-only', action='store_true', help='Build/notarize without publishing')
     mode.add_argument('--prepare-only', action='store_true', help='Replay sources without building or publishing')
@@ -361,7 +393,7 @@ def main():
     if args.publish_only and not (work / 'release-metadata.json').is_file():
         parser.error('--publish-only requires a completed build directory')
     print(f'Release output and log: {work}', flush=True)
-    release = Release(config, platform, work, args.jobs)
+    release = Release(config, platform, work, args.jobs, args.sparkle_key_file)
     lock_path = platform / 'build/local-release.lock'
     with lock_path.open('a') as lock, (work / 'release.log').open('a') as log:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
