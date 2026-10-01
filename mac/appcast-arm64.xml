@@ -7,6 +7,15 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Helium Fork</title>
         <item>
             <title>0.18.1.1</title>
+            <pubDate>Thu, 01 Oct 2026 09:57:51 +0200</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.18.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/lcabraja/helium/releases/download/macos-2/Helium-Fork-arm64-2-c97cc27.zip" length="235540622" type="application/octet-stream" sparkle:edSignature="wW2G6W73PYINML+ZrrM0LAMbjUTu4MK+V6UMQzU4HI7FelPltvyic2oWfJWE/8uU9bGOJKqHx/jjkMRT8mKKAg=="/>
+        </item>
+        <item>
+            <title>0.18.1.1</title>
             <pubDate>Wed, 30 Sep 2026 18:26:15 +0200</pubDate>
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>0.18.1.1</sparkle:shortVersionString>
@@ -17,6 +26,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Z89Y14uG/bpaFu40FP+Sk8ujWnFlOlXZnKQiisz4+0e1QtImxyOSGC4Ukv0Pg2Y1yEuILyh4Ycu3wMdUA525DA==
-length: 1135
+edSignature: BtjS2lGD23rec4lqisHgSRBBx85MNA/5O8l90YGsuepK2N3Jk5falPuNZk1ETRG0SZ5QeTtY4pz0EnjvoLgcBA==
+length: 1835
 -->
