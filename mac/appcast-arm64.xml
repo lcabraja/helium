@@ -1,0 +1,19 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Helium Fork</title>
+        <item>
+            <title>0.18.1.1</title>
+            <pubDate>Wed, 30 Sep 2026 18:26:15 +0200</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.18.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/lcabraja/helium/releases/download/macos-1/Helium-Fork-arm64-1-f4345d5.zip" length="235540556" type="application/octet-stream" sparkle:edSignature="JOKIn+1WKyP8LHN19jgwOJPGSkLq5/OHmLZcnXH3RJAo/O+HeMsRBY5H1u54k6MBKG7fSYt9IR3nnQwKEbsMAg=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: Nimyo/nVHmBoxu7LUrnAEXWM28PgZcm4sAp+56ThVOY+hr45/R2orAIqZq70fine11SJaTswyptrsxAWIzYLDw==
+length: 1143
+-->
