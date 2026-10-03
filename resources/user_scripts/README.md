@@ -17,6 +17,8 @@ Use a JavaScript regular expression without surrounding `/` delimiters. This is
 not a Chrome match-pattern or a shell glob. The regex is tested against the full
 URL, including query string and fragment. `^` and `$` anchor the whole URL. The
 editor validates the regex and previews matching open tabs and a test URL.
+The open-tab list refreshes when you return to the manager without replacing
+unsaved script edits.
 
 A specific YouTube watch page:
 

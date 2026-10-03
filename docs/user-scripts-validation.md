@@ -41,6 +41,9 @@ Prepared Chromium baseline: `73c14f6228d7cd537c855007e8f88678969cc0eb`.
   with their generated build flags and resource headers.
 - The refreshed editor preview retained the saved example when Escape dismissed
   its focused delete dialog.
+- The manager refreshed its matching-tab count from one to two and back to one
+  after opening and closing a fixture tab. An unsaved name edit survived both
+  refreshes. Saved document-start code still ran on the next fixture navigation.
 
 - Replaying all 383 maintained patches and resources reproduced the prepared
   source exactly, with zero source-file changes.
