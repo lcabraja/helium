@@ -51,7 +51,7 @@ def main():
             elif path=='/fixtures/page.css':
                 data=STYLE.encode();ctype='text/css; charset=utf-8'
             elif path=='/fixtures/slow.svg':
-                time.sleep(4);ctype='image/svg+xml'
+                time.sleep(15);ctype='image/svg+xml'
                 data=b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
             else:
                 data=FIXTURE.replace('SLOW_IMAGE','<img src="/fixtures/slow.svg" alt=""/>' if path=='/fixtures/slow' else '').encode()

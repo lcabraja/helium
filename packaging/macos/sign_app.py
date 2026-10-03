@@ -25,7 +25,8 @@ def run(*command, capture=False):
     return result.stdout if capture else None
 
 
-def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=None):
+def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=None,
+                     app_name='Helium Fork'):
     """Give the outer app and its helpers a consistent fork identity."""
     outer = app / 'Contents/Info.plist'
     original_id = plistlib.loads(outer.read_bytes())['CFBundleIdentifier']
@@ -37,8 +38,8 @@ def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=No
         if identifier == original_id or identifier.startswith(original_id + '.'):
             info['CFBundleIdentifier'] = bundle_id + identifier[len(original_id):]
         if path == outer:
-            info['CFBundleDisplayName'] = 'Helium Fork'
-            info['CFBundleName'] = 'Helium Fork'
+            info['CFBundleDisplayName'] = app_name
+            info['CFBundleName'] = app_name
             info['CrProductDirName'] = profile_dir
             if build_number:
                 info['CFBundleVersion'] = str(build_number)
@@ -119,6 +120,8 @@ def main():
     parser.add_argument('--team-id', required=True)
     parser.add_argument('--bundle-id', default='eu.cabraja.helium')
     parser.add_argument('--profile-dir', default='eu.cabraja.helium')
+    parser.add_argument('--app-name', default='Helium Fork',
+                        help='Display and bundle-directory name for an isolated review app')
     parser.add_argument('--build-number', type=int, help='Increasing Sparkle build version')
     parser.add_argument('--feed-url', help='HTTPS Sparkle appcast URL')
     parser.add_argument('--public-key', help='Expected public Sparkle Ed25519 key')
@@ -136,6 +139,8 @@ def main():
         parser.error('Invalid bundle identifier')
     if not re.fullmatch(r'[A-Za-z0-9._-]+', args.profile_dir):
         parser.error('Profile directory must be a single directory name')
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9 -]{0,63}', args.app_name):
+        parser.error('App name must contain only letters, digits, spaces or hyphens')
     if args.build_number is not None and args.build_number < 1:
         parser.error('Build number must be positive')
     if args.feed_url and not args.feed_url.startswith('https://'):
@@ -166,9 +171,10 @@ def main():
         parser.error('Certificate does not belong to the requested team')
 
     output.mkdir(parents=True)
-    app = output / 'Helium Fork.app'
+    app = output / f'{args.app_name}.app'
     run('/usr/bin/ditto', source_app, app)
-    configure_bundle(app, args.bundle_id, args.profile_dir, args.build_number, args.feed_url)
+    configure_bundle(app, args.bundle_id, args.profile_dir, args.build_number, args.feed_url,
+                     args.app_name)
     plan = signing_plan(source, source_app, app, args.bundle_id)
     if args.plan_only:
         print(f'Validated {len(plan)} signing objects; app staged but not signed')

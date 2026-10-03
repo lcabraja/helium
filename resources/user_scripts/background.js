@@ -113,7 +113,7 @@ chrome.runtime.onStartup.addListener(() => serialized(reconcile));
 chrome.action.onClicked.addListener(async tab => {
   const manager = chrome.runtime.getURL('manager.html');
   const existing = (await chrome.tabs.query({url: manager + '*'}))[0];
-  const url = manager + (supportedUrl(tab.url) ? '?url=' + encodeURIComponent(tab.url) : '');
+  const url = manager + (!tab.incognito && supportedUrl(tab.url) ? '?url=' + encodeURIComponent(tab.url) : '');
   if (existing) {
     await chrome.tabs.update(existing.id, {active: true});
     await chrome.windows.update(existing.windowId, {focused: true});

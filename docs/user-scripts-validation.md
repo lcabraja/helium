@@ -31,13 +31,28 @@ Prepared Chromium baseline: `73c14f6228d7cd537c855007e8f88678969cc0eb`.
 - Disabling the after-load script prevented execution after both reload and SPA
   navigation, including a fragment route.
 
+- On a fixture whose image delays window load by 15 seconds, document-start code
+  ran while the page was interactive and after-load remained at zero. Leaving
+  the matching route before load completed cancelled the old callback.
+- Disabling the after-load script in the manager while the fixture was loading
+  also kept its count at zero after window load completed.
+
+- All eight changed C++ translation units passed a direct Clang syntax check
+  with their generated build flags and resource headers.
+- The refreshed editor preview retained the saved example when Escape dismissed
+  its focused delete dialog.
+
+- Replaying all 383 maintained patches and resources reproduced the prepared
+  source exactly, with zero source-file changes.
+- Isolated packaging configuration preserves the separate app name, profile
+  directory and helper bundle identifiers.
+
 ## Still to verify
 
 The full isolated native build is in progress. The compiled component's default
 API permission and first-launch toolbar pin, native app packaging/signing,
 restart persistence in the compiled app, and the final download are pending.
-Further browser checks for slow-load cancellation and incognito behavior are
-pending. Unit tests cover cancellation. Native guards exclude in-memory
+Further browser checks for incognito behavior are pending. Native guards exclude in-memory
 partitions, including independent incognito tabs inside a regular profile.
 
 No production profile or update feed is used for these tests. The experimental
