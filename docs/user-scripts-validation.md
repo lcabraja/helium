@@ -50,13 +50,57 @@ Prepared Chromium baseline: `73c14f6228d7cd537c855007e8f88678969cc0eb`.
 - Isolated packaging configuration preserves the separate app name, profile
   directory and helper bundle identifiers.
 
-## Still to verify
+## Native app verification
 
-The full isolated native build is in progress. The compiled component's default
-API permission and first-launch toolbar pin, native app packaging/signing,
-restart persistence in the compiled app, and the final download are pending.
-Further browser checks for incognito behavior are pending. Native guards exclude in-memory
-partitions, including independent incognito tabs inside a regular profile.
+The native app was built from `9cd4569aad4a716639320f22a65f4edc7ef8ba9d`
+and tested on 2026-10-03. The full build completed 34,779 steps in 3h38m53s.
+A final incremental build incorporated the manager refresh change in 17 seconds.
 
-No production profile or update feed is used for these tests. The experimental
-build disables Sparkle and will use a separate app/profile identity.
+Computer-use checks in a fresh disposable profile passed:
+
+- The User Scripts button appeared automatically on first launch. Creating,
+  saving and enabling scripts required no manual extension permission setting.
+- Both saved scripts ran in ordinary tabs and a Personal container tab.
+  The first page script observed the document-start marker while loading.
+  After-load code read page state and displayed `42 / complete` in the DOM.
+- The page console visibly showed the user document-start log, the first page
+  script, the user after-load log, and the page load log in that order.
+- SPA changes ran each matching script once more in an ordinary tab.
+- Neither script ran in an independent incognito tab, on initial navigation,
+  an SPA route change, or after hibernating and reopening that tab.
+- The manager excluded the private tab from its matching-tab suggestions,
+  including while the private tab was hibernated. Opening the manager from
+  the private tab did not copy its URL into the manager URL or test field.
+- A separate incognito window had no User Scripts toolbar component, and
+  neither script ran on navigation or an SPA route change.
+- After quitting and restarting the app, both saved scripts ran on the first
+  fixture navigation. Both remained enabled in the manager.
+- Unpinning the toolbar button survived the restart. The manager remained
+  accessible through the Extensions menu.
+
+The test app is `Helium User Scripts`, with bundle identifier and profile
+directory `eu.cabraja.helium.userscripts`. It targets Apple Silicon and macOS 15
+or later. The disposable test profile used `--use-mock-keychain` and contained
+no real credentials. No production app, profile or update feed was modified.
+
+## Signing and artifact
+
+Developer ID signing used the existing Keychain identity for team `GJP8JC4Y23`.
+No new Keychain approval prompt appeared, and no exported private key was used.
+Apple accepted notarization; stapling, ticket validation, strict deep code
+signature verification and Gatekeeper assessment passed.
+
+The application contains no Sparkle framework, linked Sparkle dependency or
+Sparkle Info.plist keys. Automatic updates are disabled for this experiment.
+
+Archive: `Helium-User-Scripts-9cd4569-arm64.zip`.
+
+SHA-256:
+`e4587bbc39bbcb2c7235045db8bd528b874ad7433d436339bf5f8d4563e9d95e`.
+
+## Scope limits
+
+Scripts run only in top-level matching HTTP and HTTPS pages. GM APIs are not
+implemented; asynchronous code can use an async IIFE. The editor-only web
+preview saves examples locally but cannot inject into other websites.
+Intel macOS builds and other operating systems were not built in this run.
