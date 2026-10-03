@@ -55,13 +55,26 @@ function App() {
   const shown = state.scripts.filter(script => script.name.toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
+    let active = true;
+    const refreshTabs = () => {
+      if (document.visibilityState !== 'visible') return;
+      request<Tab[]>('tabs').then(open => { if (active) setTabs(open); })
+        .catch(error => { if (active) setError('Could not refresh open tabs: ' + error.message); });
+    };
+    document.addEventListener('visibilitychange', refreshTabs);
+    window.addEventListener('focus', refreshTabs);
     Promise.all([request<Snapshot>('list'), request<Tab[]>('tabs')]).then(([saved, open]) => {
       setState(saved); setTabs(open); if (saved.scripts[0]) setDraft(saved.scripts[0]);
     }).catch(error => setError(error.message)).finally(() => setBusy(false));
     const media = matchMedia('(prefers-color-scheme: dark)');
     const changed = () => setDark(media.matches);
     media.addEventListener('change', changed);
-    return () => media.removeEventListener('change', changed);
+    return () => {
+      active = false;
+      media.removeEventListener('change', changed);
+      document.removeEventListener('visibilitychange', refreshTabs);
+      window.removeEventListener('focus', refreshTabs);
+    };
   }, []);
   useEffect(() => {
     if (!dirty) return;
