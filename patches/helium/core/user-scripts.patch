@@ -1,0 +1,309 @@
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -618,6 +618,7 @@
+     "//components/user_prefs",
+     "//components/vector_icons",
+     "//components/extstore_fixups",
++    "//components/helium_user_scripts",
+     "//content/public/browser",
+     "//extensions/browser",
+     "//extensions/browser:crx_installer",
+--- a/chrome/browser/extensions/chrome_component_extension_resource_manager.cc
++++ b/chrome/browser/extensions/chrome_component_extension_resource_manager.cc
+@@ -27,6 +27,7 @@
+ #include "chrome/grit/theme_resources.h"
+ #include "components/contextual_tasks/public/features.h"
+ #include "components/extstore_fixups/resources/grit/extstore_fixups_resources_map.h"
++#include "components/helium_user_scripts/resources/grit/helium_user_scripts_resources_map.h"
+ #include "components/omnibox/common/omnibox_features.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "extensions/browser/extension_config_map.h"
+@@ -134,6 +135,7 @@
+   }
+   AddComponentResourceEntries(kUblockResources);
+   AddComponentResourceEntries(kExtstoreFixupsResources);
++  AddComponentResourceEntries(kHeliumUserScriptsResources);
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   if (base::FeatureList::IsEnabled(features::kIndigo)) {
+--- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
++++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
+@@ -23,6 +23,8 @@
+ #include "components/helium_services/extension_ids.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
++#include "extensions/common/helium_user_scripts.h"
++#include "components/helium_user_scripts/resources/grit/helium_user_scripts_resources.h"
+ #include "printing/buildflags/buildflags.h"
+ #include "third_party/ublock/resources/grit/ublock_resources.h"
+ 
+@@ -46,6 +48,7 @@
+       extension_misc::kPdfExtensionId,
+       helium::kUBlockOriginComponentId,
+       helium::kExtstoreFixupsExtensionId,
++      kHeliumUserScriptsExtensionId,
+ #if BUILDFLAG(IS_CHROMEOS)
+       extension_misc::kAssessmentAssistantExtensionId,
+       extension_misc::kAccessibilityCommonExtensionId,
+@@ -110,6 +113,7 @@
+     case IDR_WEBSTORE_MANIFEST:
+     case IDR_UBLOCK_MANIFEST_JSON:
+     case IDR_EXTSTORE_FIXUPS_MANIFEST_JSON:
++    case IDR_HELIUM_USER_SCRIPTS_MANIFEST_JSON:
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+     // Separate ChromeOS list, as it is quite large.
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -45,6 +45,7 @@
+ #include "components/omnibox/common/omnibox_features.h"
+ #include "components/version_info/version_info.h"
+ #include "components/extstore_fixups/resources/grit/extstore_fixups_resources.h"
++#include "components/helium_user_scripts/resources/grit/helium_user_scripts_resources.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/common/content_switches.h"
+ #include "extensions/browser/extension_file_task_runner.h"
+@@ -563,6 +564,8 @@
+     AddWebStoreApp();
+     AddUBlock();
+     AddExtstoreFixups();
++    Add(IDR_HELIUM_USER_SCRIPTS_MANIFEST_JSON,
++        base::FilePath(FILE_PATH_LITERAL("helium_user_scripts")));
+ #if BUILDFLAG(IS_CHROMEOS)
+     AddChromeApp();
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+--- a/chrome/browser/extensions/extension_tab_util.cc
++++ b/chrome/browser/extensions/extension_tab_util.cc
+@@ -50,12 +50,15 @@
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "extensions/browser/extension_function.h"
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/error_utils.h"
+ #include "extensions/common/extension.h"
++#include "extensions/common/helium_user_scripts.h"
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/manifest_handlers/options_page_info.h"
+ #include "extensions/common/mojom/api_permission_id.mojom-shared.h"
+@@ -430,6 +433,15 @@
+   tab_object.muted_info = CreateMutedInfo(contents);
+ 
+   tab_object.incognito = contents->GetBrowserContext()->IsOffTheRecord();
++  // The personal-script manager must not list or inject into ephemeral
++  // container tabs, which do not use an off-the-record Profile.
++  if (extension && extension->id() == extensions::kHeliumUserScriptsExtensionId &&
++      contents->GetPrimaryMainFrame()
++          ->GetStoragePartition()
++          ->GetConfig()
++          .in_memory()) {
++    tab_object.incognito = true;
++  }
+   gfx::Size contents_size = contents->GetContainerBounds().size();
+   tab_object.width = contents_size.width();
+   tab_object.height = contents_size.height();
+--- a/chrome/browser/ui/toolbar/toolbar_actions_model.cc
++++ b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+@@ -44,6 +44,7 @@
+ #include "extensions/browser/uninstall_reason.h"
+ #include "extensions/browser/unloaded_extension_reason.h"
+ #include "extensions/common/extension_set.h"
++#include "extensions/common/helium_user_scripts.h"
+ #include "extensions/common/manifest.h"
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/permissions/permissions_data.h"
+@@ -668,6 +669,26 @@
+       continue;
+     }
+     action_ids_.insert(extension->id());
++
++    // Component extensions can load before this model observes installation.
++    // Seed the built-in manager once, then preserve the user's pin choice.
++    if (extension->id() == extensions::kHeliumUserScriptsExtensionId &&
++        extensions::Manifest::IsComponentLocation(extension->location())) {
++      constexpr extensions::PrefMap kPinInitialized = {
++          "helium_user_scripts_pin_initialized", extensions::PrefType::kBool,
++          extensions::PrefScope::kExtensionSpecific};
++      bool initialized = false;
++      extension_prefs_->ReadPrefAsBoolean(extension->id(), kPinInitialized,
++                                         &initialized);
++      if (!initialized) {
++        auto pinned = extension_prefs_->GetPinnedExtensions();
++        if (!std::ranges::contains(pinned, extension->id())) {
++          pinned.push_back(extension->id());
++          extension_prefs_->SetPinnedExtensions(pinned);
++        }
++        extension_prefs_->SetBooleanPref(extension->id(), kPinInitialized, true);
++      }
++    }
+   }
+ }
+ 
+--- a/chrome/chrome_paks.gni
++++ b/chrome/chrome_paks.gni
+@@ -136,6 +136,7 @@
+       "$root_gen_dir/components/components_resources.pak",
+       "$root_gen_dir/components/crashes_resources.pak",
+       "$root_gen_dir/components/extstore_fixups/resources/extstore_fixups_resources.pak",
++      "$root_gen_dir/components/helium_user_scripts/resources/helium_user_scripts_resources.pak",
+       "$root_gen_dir/components/flags_ui_resources.pak",
+       "$root_gen_dir/components/internal_debug_pages_disabled_resources.pak",
+       "$root_gen_dir/components/metrics/metrics_server_urls.pak",
+@@ -174,6 +175,7 @@
+       "//chrome/common:resources",
+       "//components/resources",
+       "//components/extstore_fixups",
++      "//components/helium_user_scripts",
+       "//content:content_resources",
+       "//content/browser/resources",
+       "//mojo/public/js:resources",
+--- a/extensions/browser/api/user_scripts/user_scripts_api.cc
++++ b/extensions/browser/api/user_scripts/user_scripts_api.cc
+@@ -16,9 +16,14 @@
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/types/optional_util.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
+ #include "extensions/browser/extension_file_task_runner.h"
+ #include "extensions/browser/extension_system.h"
+ #include "extensions/browser/extension_user_script_loader.h"
++#include "extensions/browser/extensions_browser_client.h"
+ #include "extensions/browser/scripting_constants.h"
+ #include "extensions/browser/scripting_utils.h"
+ #include "extensions/browser/user_script_manager.h"
+@@ -27,6 +32,7 @@
+ #include "extensions/common/api/scripts_internal/script_serialization.h"
+ #include "extensions/common/api/user_scripts.h"
+ #include "extensions/common/extension_features.h"
++#include "extensions/common/helium_user_scripts.h"
+ #include "extensions/common/mojom/code_injection.mojom-forward.h"
+ #include "extensions/common/mojom/execution_world.mojom-shared.h"
+ #include "extensions/common/user_script.h"
+@@ -774,6 +780,22 @@
+     return false;
+   }
+ 
++  // Independent incognito tabs have in-memory partitions in a regular Profile.
++  // Registered scripts are blocked in UserScriptLoader; block SPA execution too.
++  if (extension()->id() == kHeliumUserScriptsExtensionId) {
++    content::WebContents* contents = nullptr;
++    if (!ExtensionsBrowserClient::Get()->IsValidTabId(
++            browser_context(), internal_injection_target.tab_id,
++            include_incognito_information(), &contents) ||
++        contents->GetPrimaryMainFrame()
++            ->GetStoragePartition()
++            ->GetConfig()
++            .in_memory()) {
++      *error = "Personal user scripts do not run in private tabs.";
++      return false;
++    }
++  }
++
+   mojom::ExecutionWorld execution_world =
+       ConvertExecutionWorld(injection_.world);
+   std::optional<std::string> execution_world_id = injection_.world_id;
+--- a/extensions/browser/user_script_loader.cc
++++ b/extensions/browser/user_script_loader.cc
+@@ -23,10 +23,13 @@
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/browser/extensions_browser_client.h"
+ #include "extensions/browser/renderer_startup_helper.h"
+ #include "extensions/browser/script_injection_tracker.h"
++#include "extensions/common/helium_user_scripts.h"
+ #include "extensions/common/mojom/run_location.mojom-shared.h"
+ #include "extensions/common/permissions/permissions_data.h"
+ 
+@@ -525,6 +528,13 @@
+     return SendUpdateResult::kNoActionTaken;
+   }
+ 
++  // Helium's independent incognito tabs use in-memory partitions inside a
++  // regular profile. Never send the personal script bundle to those renderers.
++  if (host_id().id == kHeliumUserScriptsExtensionId &&
++      process->GetStoragePartition()->GetConfig().in_memory()) {
++    return SendUpdateResult::kNoActionTaken;
++  }
++
+   // Never deliver user scripts (content scripts) to a privileged renderer
+   // process (see //chrome's PrivilegedWebContents), so extensions cannot inject
+   // into privileged content. Privileged content always gets its own dedicated
+--- a/extensions/browser/user_script_manager.cc
++++ b/extensions/browser/user_script_manager.cc
+@@ -20,6 +20,8 @@
+ #include "extensions/browser/user_script_loader.h"
+ #include "extensions/common/api/content_scripts.h"
+ #include "extensions/common/extension_features.h"
++#include "extensions/common/helium_user_scripts.h"
++#include "extensions/common/manifest.h"
+ #include "extensions/common/features/feature_developer_mode_only.h"
+ #include "extensions/common/manifest_handlers/content_scripts_handler.h"
+ #include "extensions/common/manifest_handlers/permissions_parser.h"
+@@ -97,10 +99,13 @@
+ }
+ 
+ void UserScriptManager::InitializeUserScriptState(const Extension& extension) {
+-
+-  SetCurrentUserScriptAllowedState(util::GetBrowserContextId(browser_context_),
+-                                   extension.id(),
+-                                   IsUserScriptPrefEnabled(extension.id()));
++  // Only the packaged manager is enabled without an extension settings toggle.
++  const bool is_builtin_manager =
++      extension.id() == kHeliumUserScriptsExtensionId &&
++      Manifest::IsComponentLocation(extension.location());
++  SetCurrentUserScriptAllowedState(
++      util::GetBrowserContextId(browser_context_), extension.id(),
++      IsUserScriptPrefEnabled(extension.id()) || is_builtin_manager);
+ }
+ 
+ bool UserScriptManager::AreUserScriptsAllowed(const Extension& extension) {
+--- a/extensions/common/BUILD.gn
++++ b/extensions/common/BUILD.gn
+@@ -389,6 +389,7 @@
+     "frame_context_data.h",
+     "hashed_extension_id.cc",
+     "hashed_extension_id.h",
++    "helium_user_scripts.h",
+     "icons/extension_icon_set.cc",
+     "icons/extension_icon_set.h",
+     "icons/extension_icon_variant.cc",
+--- a/tools/gritsettings/resource_ids.spec
++++ b/tools/gritsettings/resource_ids.spec
+@@ -1413,6 +1413,10 @@
+    "META": {"sizes": {"includes": [48],}},
+     "includes": [7510],
+   },
++  "<(SHARED_INTERMEDIATE_DIR)/components/helium_user_scripts/resources.grd": {
++    "META": {"sizes": {"includes": [20]}},
++    "includes": [7515],
++  },
+   # END components/ section.
+ 
+   # START ios/ section.
+--- /dev/null
++++ b/extensions/common/helium_user_scripts.h
+@@ -0,0 +1,13 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef EXTENSIONS_COMMON_HELIUM_USER_SCRIPTS_H_
++#define EXTENSIONS_COMMON_HELIUM_USER_SCRIPTS_H_
++
++namespace extensions {
++inline constexpr char kHeliumUserScriptsExtensionId[] =
++    "eibeagacednihaofabnkbniopkfjghng";
++}  // namespace extensions
++
++#endif  // EXTENSIONS_COMMON_HELIUM_USER_SCRIPTS_H_

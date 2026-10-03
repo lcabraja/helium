@@ -68,3 +68,20 @@ generated/product_icon/256x256.png chrome/app/theme/chromium/linux/product_logo_
 
 generated/product_icon/16x16.png chrome/app/theme/default_100_percent/chromium/linux/product_logo_16.png
 generated/product_icon/32x32.png chrome/app/theme/default_100_percent/chromium/linux/product_logo_32.png
+
+# Built-in User Scripts component
+user_scripts/BUILD.gn components/helium_user_scripts/BUILD.gn
+user_scripts/background.js components/helium_user_scripts/background.js
+user_scripts/build_ui.py components/helium_user_scripts/build_ui.py
+user_scripts/bun.lock components/helium_user_scripts/bun.lock
+user_scripts/core.js components/helium_user_scripts/core.js
+user_scripts/manager.css components/helium_user_scripts/manager.css
+user_scripts/manager.html components/helium_user_scripts/manager.html
+user_scripts/manager.tsx components/helium_user_scripts/manager.tsx
+user_scripts/manifest.json components/helium_user_scripts/manifest.json
+user_scripts/package.json components/helium_user_scripts/package.json
+user_scripts/setup_ui.py components/helium_user_scripts/setup_ui.py
+user_scripts/tsconfig.json components/helium_user_scripts/tsconfig.json
+user_scripts/validation.js components/helium_user_scripts/validation.js
+user_scripts/vite.config.ts components/helium_user_scripts/vite.config.ts
+user_scripts/preview/demo-service.ts components/helium_user_scripts/preview/demo-service.ts

@@ -381,3 +381,5 @@ helium/core/container-tab-crest.patch
 helium/core/tab-style-build-dependencies.patch
 
 helium/core/fork-update-server.patch
+
+helium/core/user-scripts.patch

@@ -222,6 +222,9 @@ class Release:
     def build(self, number):
         print('Replaying source patches and translations...', flush=True)
         chromium_revision = prepare(ROOT, self.platform, self.work, sys.executable, self.run)
+        print('Preparing the pinned user-scripts manager dependencies...', flush=True)
+        self.run(sys.executable, self.source / 'components/helium_user_scripts/setup_ui.py',
+                 cwd=self.source)
         print('Configuring and building Helium with Sparkle...', flush=True)
         args = '\n'.join(path.read_text() for path in (
             ROOT / 'flags.gn', self.platform / 'flags.macos.gn', ROOT / 'docs/macos-development.gn'))

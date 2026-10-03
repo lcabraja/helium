@@ -1,0 +1,59 @@
+# Copyright 2026 The Helium Authors. GPL-3.0.
+import("//tools/grit/grit_rule.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
+
+extension_files = [
+  "manifest.json",
+  "manager.html",
+  "manager.js",
+  "manager.css",
+  "background.js",
+  "icon.png",
+]
+
+action("bundle") {
+  script = "build_ui.py"
+  inputs = [
+    "package.json",
+    "bun.lock",
+    "vite.config.ts",
+    "manager.tsx",
+    "manager.css",
+    "manager.html",
+    "manifest.json",
+    "background.js",
+    "core.js",
+    "validation.js",
+    "preview/demo-service.ts",
+  ]
+  outputs = []
+  foreach(file, extension_files) {
+    outputs += [ "$target_gen_dir/$file" ]
+  }
+  args = [
+    "--out",
+    rebase_path(target_gen_dir, root_build_dir),
+  ]
+}
+
+generate_grd("resources_grd") {
+  deps = [ ":bundle" ]
+  out_grd = "$target_gen_dir/resources.grd"
+  grd_prefix = "helium_user_scripts"
+  resource_path_prefix = "helium_user_scripts"
+  input_files_base_dir = rebase_path(target_gen_dir, "//")
+  input_files = extension_files
+}
+
+grit("helium_user_scripts") {
+  source = "$target_gen_dir/resources.grd"
+  enable_input_discovery_for_gn_analyze = false
+  output_dir = "$target_gen_dir/resources"
+  outputs = [
+    "grit/helium_user_scripts_resources.h",
+    "grit/helium_user_scripts_resources_map.cc",
+    "grit/helium_user_scripts_resources_map.h",
+    "helium_user_scripts_resources.pak",
+  ]
+  deps = [ ":resources_grd" ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "helium-user-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build && bun build background.js --outdir dist --target browser --format esm",
+    "test": "bun test ./tests",
+    "typecheck": "tsc --noEmit",
+    "build:demo": "vite build --mode demo --outDir demo-dist"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "0.5.4",
+    "@astryxdesign/theme-neutral": "0.5.4",
+    "@da-facility/ui": "file:vendor/ui",
+    "@stylexjs/stylex": "0.19.0",
+    "acorn": "8.15.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.19",
+    "@types/chrome": "0.1.36",
+    "@types/react": "19.1.9",
+    "@types/react-dom": "19.1.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "5.9.2",
+    "vite": "8.1.3"
+  }
+}

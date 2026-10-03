@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Helium User Scripts",
+  "version": "1.0.0",
+  "description": "Personal JavaScript for the pages you choose.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA20FPIj3UCb6VhWE8PntnsQFicn3/z255vg+FEZUiqeRPwNBOxUZuSvaeG9gi6FJq21dJ9pV8zIg/OzqGVqUSPJy/AnO4A8GtfA3FX02/ivuRRdXcA7aeVzalPBs8ka51iwfmM5rJy1YoD7E4Q91K0fUaSZMP/mHv24b+SxYgvbP+295MkgdlBx9u49dej/FyL7yo58SPac8mlxILRkbN12QKo2yO0R2gew9YWLdDq0E6nxha7DegeP7wmU6KtkPaJgDh/r2Nq5Yzg49u000qmslYe+0wn39gubtOAZanGqSurJaZizgJMVs4MTKT3E8+wJAz2SuLxwXskYPnHd7MrwIDAQAB",
+  "permissions": [
+    "storage",
+    "userScripts",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "User Scripts",
+    "default_icon": {
+      "32": "icon.png"
+    }
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "options_ui": {
+    "page": "manager.html",
+    "open_in_tab": true
+  },
+  "incognito": "not_allowed",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';"
+  }
+}
