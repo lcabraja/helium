@@ -1,0 +1,52 @@
+Helium profile backup and migration for macOS
+
+Download the script into Downloads, then run it as your normal macOS user:
+
+curl -fL https://lcabraja.github.io/helium/scripts/backup-helium.sh -o "$HOME/Downloads/backup-helium.sh" && /bin/bash "$HOME/Downloads/backup-helium.sh"
+
+The default command only makes a backup. To also migrate to the auto-updating
+Helium Fork app, add --migrate-to fork to the bash command. For the separate
+Helium User Scripts test app, use --migrate-to user-scripts instead. The test
+app does not have automatic updates enabled.
+
+The script waits for all Helium apps to quit. Use Cmd+Q and keep them closed
+until it prints Finished. It does not close apps for you. No sudo, Homebrew,
+Python or third-party package is required.
+
+It copies the complete mainline user-data directory:
+  ~/Library/Application Support/net.imput.helium
+
+Every on-disk profile and Local State is included: saved sessions, bookmarks,
+extensions, preferences and site data. Incognito state held only in memory
+is not included. Process locks and DevToolsActivePort are omitted from the copy.
+
+It compares file contents, creates a dated ZIP in a private folder in Downloads,
+checks the ZIP and writes a SHA-256 file plus restore instructions. A failed
+operation can leave a partial backup folder; only a completed ZIP followed by
+the Finished message indicates success. Large profiles require free disk space
+for a profile copy and ZIP, plus another profile copy if migrating.
+
+Migration copies from the verified backup into:
+  fork:         ~/Library/Application Support/eu.cabraja.helium
+  user-scripts: ~/Library/Application Support/eu.cabraja.helium.userscripts
+
+An existing destination is renamed beside itself with a before-mainline suffix.
+Its exact recovery path is recorded in MIGRATION.txt in the backup folder.
+The script does not merge profiles or alter the original mainline profile.
+After success, open the selected fork normally, without a --user-data-dir flag.
+If your saved tabs do not reopen, use History > Recently Closed or Cmd+Shift+T.
+
+The backup contains private, unencrypted browser data. Nothing is uploaded.
+No Keychain secret is read or exported. On the same Mac and macOS account,
+the fork uses the existing Helium Storage Key. Approve its access prompt for
+your trusted signed fork. A profile ZIP alone does not transfer that secret
+to another Mac. Check saved logins and tabs before removing any old copy.
+
+Manual restoration:
+1. Quit all Helium apps.
+2. Extract the ZIP. Its Profile folder is the complete user-data directory.
+3. Rename an existing destination aside, then put Profile at that destination.
+4. Keep the old folder and backup until you have checked the restored browser.
+
+Use --help to see custom source and output options. The source override must
+point to the complete user-data directory containing Local State, not Default.
