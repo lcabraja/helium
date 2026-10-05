@@ -1,5 +1,6 @@
 {
   "repository": "lcabraja/helium",
+  "app_name": "Helium-3",
   "pages_branch": "gh-pages",
   "update_origin": "https://lcabraja.github.io/helium/",
   "bundle_id": "eu.cabraja.helium",

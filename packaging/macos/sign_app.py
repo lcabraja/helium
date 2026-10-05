@@ -10,6 +10,7 @@ import hashlib
 import json
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +26,8 @@ def run(*command, capture=False):
     return result.stdout if capture else None
 
 
-def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=None):
+def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=None,
+                     app_name='Helium-3'):
     """Give the outer app and its helpers a consistent fork identity."""
     outer = app / 'Contents/Info.plist'
     original_id = plistlib.loads(outer.read_bytes())['CFBundleIdentifier']
@@ -37,8 +39,8 @@ def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=No
         if identifier == original_id or identifier.startswith(original_id + '.'):
             info['CFBundleIdentifier'] = bundle_id + identifier[len(original_id):]
         if path == outer:
-            info['CFBundleDisplayName'] = 'Helium Fork'
-            info['CFBundleName'] = 'Helium Fork'
+            info['CFBundleDisplayName'] = app_name
+            info['CFBundleName'] = app_name
             info['CrProductDirName'] = profile_dir
             if build_number:
                 info['CFBundleVersion'] = str(build_number)
@@ -50,6 +52,25 @@ def configure_bundle(app, bundle_id, profile_dir, build_number=None, feed_url=No
                 info['SUVerifyUpdateBeforeExtraction'] = True
                 info['SURequireSignedFeed'] = True
         path.write_bytes(plistlib.dumps(info))
+
+
+def install_branding(app, output, icon_source):
+    """Compile the vector icon for modern macOS and its ICNS fallback."""
+    compiled = output / 'branding-assets'
+    compiled.mkdir()
+    run('/usr/bin/xcrun', 'actool', '--output-format', 'human-readable-text',
+        '--notices', '--warnings', '--errors', '--platform', 'macosx',
+        '--target-device', 'mac', '--lightweight-asset-runtime-mode=enabled',
+        '--app-icon', 'AppIcon', '--minimum-deployment-target', '15.0',
+        '--output-partial-info-plist', compiled / 'partial.plist',
+        '--compile', compiled, icon_source)
+    resources = app / 'Contents/Resources'
+    shutil.copyfile(compiled / 'Assets.car', resources / 'Assets.car')
+    shutil.copyfile(compiled / 'AppIcon.icns', resources / 'app.icns')
+    for helper in (app / 'Contents/Frameworks').rglob('Helium Helper*.app'):
+        icon = helper / 'Contents/Resources/app.icns'
+        if icon.is_file():
+            shutil.copyfile(compiled / 'AppIcon.icns', icon)
 
 
 def signing_plan(source, source_app, app, bundle_id):
@@ -119,10 +140,13 @@ def main():
     parser.add_argument('--team-id', required=True)
     parser.add_argument('--bundle-id', default='eu.cabraja.helium')
     parser.add_argument('--profile-dir', default='eu.cabraja.helium')
+    parser.add_argument('--app-name', default='Helium-3')
+    parser.add_argument('--icon-source', type=Path,
+                        default=Path(__file__).parent / 'branding/AppIcon.icon')
     parser.add_argument('--build-number', type=int, help='Increasing Sparkle build version')
     parser.add_argument('--feed-url', help='HTTPS Sparkle appcast URL')
     parser.add_argument('--public-key', help='Expected public Sparkle Ed25519 key')
-    parser.add_argument('--archive-name', default='Helium-Fork-arm64.zip')
+    parser.add_argument('--archive-name', default='Helium-3-arm64.zip')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--notary-profile', help='Existing notarytool Keychain profile')
     mode.add_argument('--sign-only', action='store_true', help='Leave notarization pending')
@@ -136,6 +160,10 @@ def main():
         parser.error('Invalid bundle identifier')
     if not re.fullmatch(r'[A-Za-z0-9._-]+', args.profile_dir):
         parser.error('Profile directory must be a single directory name')
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9 -]{0,63}', args.app_name):
+        parser.error('App name must be a short display name without path separators')
+    if not (args.icon_source / 'icon.json').is_file():
+        parser.error('Icon source must be an Icon Composer bundle')
     if args.build_number is not None and args.build_number < 1:
         parser.error('Build number must be positive')
     if args.feed_url and not args.feed_url.startswith('https://'):
@@ -166,9 +194,11 @@ def main():
         parser.error('Certificate does not belong to the requested team')
 
     output.mkdir(parents=True)
-    app = output / 'Helium Fork.app'
+    app = output / f'{args.app_name}.app'
     run('/usr/bin/ditto', source_app, app)
-    configure_bundle(app, args.bundle_id, args.profile_dir, args.build_number, args.feed_url)
+    configure_bundle(app, args.bundle_id, args.profile_dir, args.build_number,
+                     args.feed_url, args.app_name)
+    install_branding(app, output, args.icon_source.resolve())
     plan = signing_plan(source, source_app, app, args.bundle_id)
     if args.plan_only:
         print(f'Validated {len(plan)} signing objects; app staged but not signed')
@@ -226,6 +256,8 @@ def main():
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     metadata = {
         'app': str(app),
+        'app_name': args.app_name,
+        'icon_sha256': hashlib.sha256((app / 'Contents/Resources/app.icns').read_bytes()).hexdigest(),
         'source_app': str(source_app),
         'bundle_id': args.bundle_id,
         'profile_directory': args.profile_dir,

@@ -40,6 +40,7 @@ def feed_version(data):
 class Release:
     def __init__(self, config, platform, work, jobs, key_file=None):
         self.config = config
+        self.app_name = config.get('app_name', 'Helium-3')
         self.platform = platform
         self.source = platform / 'build/src'
         self.work = work
@@ -236,7 +237,7 @@ class Release:
                  '-C', 'out/Default', f'-j{self.jobs}', 'chrome', 'chrome/installer/mac:mac', cwd=self.source)
         revision = self.run('git', '-C', ROOT, 'rev-parse', 'HEAD', capture=True).strip()
         tag = f'macos-{number}'
-        archive_name = f'Helium-Fork-arm64-{number}-{revision[:7]}.zip'
+        archive_name = f'{self.app_name.replace(" ", "-")}-arm64-{number}-{revision[:7]}.zip'
         package = self.work / 'package'
         print('Signing, notarizing and verifying the release...', flush=True)
         self.run(sys.executable, ROOT / 'packaging/macos/sign_app.py',
@@ -244,6 +245,7 @@ class Release:
                  '--output-dir', package, '--identity', self.config['certificate_sha1'],
                  '--team-id', self.config['team_id'], '--bundle-id', self.config['bundle_id'],
                  '--profile-dir', self.config['profile_directory'],
+                 '--app-name', self.app_name,
                  '--notary-profile', self.config['notary_profile'], '--build-number', number,
                  '--feed-url', self.feed_url, '--public-key', self.config['sparkle_public_key'],
                  '--archive-name', archive_name)
@@ -271,7 +273,7 @@ class Release:
         if extraction.exists():
             shutil.rmtree(extraction)
         self.run('ditto', '-x', '-k', archive, extraction)
-        app = extraction / 'Helium Fork.app'
+        app = extraction / f'{self.app_name}.app'
         self.run('codesign', '--verify', '--deep', '--strict', app)
         self.run('xcrun', 'stapler', 'validate', app)
         self.run('spctl', '--assess', '--type', 'execute', app)
@@ -279,10 +281,14 @@ class Release:
         for key, expected in (
                 ('CFBundleIdentifier', self.config['bundle_id']),
                 ('CrProductDirName', self.config['profile_directory']),
+                ('CFBundleName', self.app_name),
+                ('CFBundleDisplayName', self.app_name),
                 ('SUPublicEDKey', self.config['sparkle_public_key']),
                 ('SUFeedURL', self.feed_url), ('CFBundleVersion', str(metadata['build_number']))):
             if info.get(key) != expected:
                 raise ValueError(f'Incorrect release property: {key}')
+        if sha256(app / 'Contents/Resources/app.icns') != metadata['icon_sha256']:
+            raise ValueError('Release icon checksum mismatch')
         self.run('codesign', '--verify', '-R',
                  f'=identifier "{self.config["bundle_id"]}" and anchor apple generic and certificate leaf[subject.OU] = "{self.config["team_id"]}"', app)
         return archive
@@ -333,7 +339,7 @@ class Release:
         if release is None:
             self.run('gh', 'release', 'create', metadata['tag'], '--repo', repo, '--draft',
                      '--target', metadata['source_revision'], '--title',
-                     f"Helium Fork {metadata['display_version']} · build {number}", '--notes-file', notes)
+                     f"{self.app_name} {metadata['display_version']} · build {number}", '--notes-file', notes)
             self.run('gh', 'release', 'upload', metadata['tag'], *assets, '--repo', repo)
         elif release['draft']:
             if release['target_commitish'] != metadata['source_revision']:
@@ -358,13 +364,25 @@ class Release:
         shutil.copyfile(feed, target)
         (self.site / '.nojekyll').touch()
         (self.site / 'index.html').write_text(
-            '<!doctype html><meta charset="utf-8"><title>Helium Fork updates</title>'
-            '<h1>Helium Fork updates</h1><p>Apple Silicon, macOS 15 or newer.</p>'
+            f'<!doctype html><meta charset="utf-8"><title>{self.app_name} updates</title>'
+            f'<h1>{self.app_name} updates</h1><p>Apple Silicon, macOS 15 or newer.</p>'
             f'<p><a href="{url}">Download build {number}</a></p>'
-            f'<p><a href="https://github.com/{repo}/releases">Release history</a></p>')
+            f'<p><a href="https://github.com/{repo}/releases">Release history</a></p>'
+            '<p><a href="scripts/backup-helium.txt">Profile migration and return instructions</a> · '
+            '<a href="scripts/backup-helium.sh">Backup and migration script</a></p>')
         self.run('git', '-C', self.site, 'add', '.')
         if self.run('git', '-C', self.site, 'status', '--porcelain', capture=True).strip():
-            self.run('git', '-C', self.site, 'commit', '-m', f'Publish Helium Fork macOS build {number}')
+            message = self.work / 'pages-commit-message.txt'
+            message.write_text(
+                f'Publish {self.app_name} macOS build {number}\n\n'
+                'Publish the verified, signed update after its notarized archive is available.\n\n'
+                'File-by-file changes:\n'
+                '- mac/appcast-arm64.xml advertises the signed archive and increasing build number.\n'
+                '- index.html links the release and retains the profile migration instructions.\n'
+                '- .nojekyll, if newly added, keeps Pages serving these static files directly.\n\n'
+                'Validation: code signature, notarization ticket, archive checksum, and Sparkle\n'
+                'feed/archive signatures passed before publication.\n')
+            self.run('git', '-C', self.site, 'commit', '-F', message)
             # Never force-push the feed. A competing publication must be reviewed.
             self.run('git', '-C', self.site, 'push', 'origin', f'HEAD:refs/heads/{branch}')
         self.ensure_pages()
@@ -449,7 +467,7 @@ def main():
         if args.notes_file:
             shutil.copyfile(args.notes_file, notes)
         elif not notes.exists():
-            notes.write_text(f"Helium Fork {metadata['display_version']}, build {metadata['build_number']}.\n\n"
+            notes.write_text(f"{release.app_name} {metadata['display_version']}, build {metadata['build_number']}.\n\n"
                              f"Source: {metadata['source_revision']}\n\n"
                              'Developer ID signed, notarized and stapled. Apple Silicon, macOS 15 or newer.\n')
         if args.build_only:

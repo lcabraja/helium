@@ -4,6 +4,7 @@
 import subprocess
 import base64
 import json
+import plistlib
 import shutil
 import tempfile
 import unittest
@@ -12,9 +13,34 @@ from unittest.mock import Mock
 
 from prepare_release_tree import patch_paths, read_git_files
 from release import Release, SPARKLE_NS, digest_config, feed_version
+from sign_app import configure_bundle
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_display_rename_preserves_profile_and_update_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder) / 'Helium-3.app'
+            outer = app / 'Contents/Info.plist'
+            helper = app / 'Contents/Frameworks/Helper.app/Contents/Info.plist'
+            helper.parent.mkdir(parents=True)
+            outer.write_bytes(plistlib.dumps({
+                'CFBundleIdentifier': 'net.imput.helium',
+                'SUPublicEDKey': 'existing-update-key', 'CFBundleExecutable': 'Helium'}))
+            helper.write_bytes(plistlib.dumps({'CFBundleIdentifier': 'net.imput.helium.helper'}))
+            configure_bundle(app, 'eu.cabraja.helium', 'eu.cabraja.helium', 3,
+                             'https://lcabraja.github.io/helium/mac/appcast-arm64.xml')
+            info = plistlib.loads(outer.read_bytes())
+            self.assertEqual(info['CFBundleName'], 'Helium-3')
+            self.assertEqual(info['CFBundleDisplayName'], 'Helium-3')
+            self.assertEqual(info['CFBundleIdentifier'], 'eu.cabraja.helium')
+            self.assertEqual(info['CrProductDirName'], 'eu.cabraja.helium')
+            self.assertEqual(info['SUPublicEDKey'], 'existing-update-key')
+            self.assertEqual(info['CFBundleExecutable'], 'Helium')
+            self.assertEqual(info['CFBundleVersion'], '3')
+            self.assertTrue(info['SURequireSignedFeed'])
+            self.assertEqual(plistlib.loads(helper.read_bytes())['CFBundleIdentifier'],
+                             'eu.cabraja.helium.helper')
+
     def test_pages_creation_conflict_checks_the_existing_site(self):
         root = Path('/unused')
         release = Release({'update_origin': 'https://example.invalid/',

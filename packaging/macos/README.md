@@ -8,7 +8,7 @@ On Katal, commit and push your patch changes, then run this from the repository:
 
 The command replays the common and platform patches, applies branding and
 translations, copies changed source files, and builds with the existing Siso
-cache. It packages `Helium Fork.app` with the stable Developer ID, notarizes it,
+cache. It packages `Helium-3.app` with the stable Developer ID, notarizes it,
 staples Apple's ticket, and verifies the extracted archive with codesign and
 Gatekeeper. It then generates and verifies Sparkle's archive and feed signatures.
 
@@ -29,6 +29,15 @@ respect the existing Helium Services consent and browser-update preference.
 Enable browser updates in Settings → Privacy and security → Helium services.
 Updates download in the background and install on quit or through the About
 page's relaunch button.
+
+Helium-3 is the display name of the existing fork. Its bundle ID, Keychain
+access, profile directory, Sparkle key and feed remain the same. The packager
+compiles `branding/AppIcon.icon` with Xcode to produce a baby-blue vector icon,
+an `Assets.car` catalog for modern macOS and an ICNS fallback. Icon files are
+installed before code signing; the published metadata records the ICNS hash.
+
+The update site also hosts `scripts/backup-helium.sh` and its migration guide.
+Publishing a release retains those files and their link on the download page.
 
 Sparkle relaunches the app with its normal profile path. Command-line overrides
 such as `--user-data-dir` are not preserved by that relaunch. If you use a custom
