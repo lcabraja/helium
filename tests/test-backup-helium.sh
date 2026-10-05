@@ -8,16 +8,20 @@ trap '/bin/rm -rf "$fixture"' EXIT
 source "$repo/scripts/backup-helium.sh"
 helium_running() { return 1; }
 fork_profile_path() { printf '%s\n' "$fixture/Fork profile"; }
+mainline_profile_path() { printf '%s\n' "$fixture/Mainline profile"; }
+mainline_browser_version() { printf '154.0.8037.57\n'; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 [[ $(printf '%s\n' '/Applications/Helium.app/Contents/MacOS/Helium' | classify_helium_processes) == 1 ]] || fail 'Mainline process missed'
 [[ $(printf '%s\n' '/Applications/Helium Fork.app/Contents/MacOS/Helium' | classify_helium_processes) == 1 ]] || fail 'Fork process missed'
+[[ $(printf '%s\n' '/Applications/Helium-3.app/Contents/MacOS/Helium' | classify_helium_processes) == 1 ]] || fail 'Renamed app process missed'
 [[ $(printf '%s\n' '/Applications/Helium.app/Contents/Frameworks/Helium Helper.app/Contents/MacOS/Helium Helper (Renderer)' | classify_helium_processes) == 1 ]] || fail 'Helper process missed'
 [[ $(printf '%s\n' '/bin/bash' '/Applications/Other.app/Contents/MacOS/Other' | classify_helium_processes) == 0 ]] || fail 'Unrelated process blocked'
 
 mainline="$fixture/Mainline profile"
 /bin/mkdir -p "$mainline/Default/Sessions" "$mainline/Profile 1" "$fixture/Downloads" "$fixture/Fork profile"
 printf '{"fixture":true}\n' > "$mainline/Local State"
+printf '154.0.8037.57' > "$mainline/Last Version"
 printf 'cookies-and-passwords-fixture\000\377\n' > "$mainline/Default/Login Data"
 printf 'session-fixture\n' > "$mainline/Default/Sessions/Session_123"
 printf 'second-profile\n' > "$mainline/Profile 1/Bookmarks"
@@ -38,7 +42,7 @@ verify_copy "$mainline" "$fixture/Extracted/Profile"
 verify_copy "$mainline" "$fixture/Fork profile"
 [[ -L "$mainline/SingletonLock" && -f "$mainline/DevToolsActivePort" ]] || fail 'Source lock files changed'
 [[ ! -e "$fixture/Fork profile/SingletonLock" && ! -L "$fixture/Fork profile/SingletonLock" ]] || fail 'Copied lock survived'
-previous=("$fixture"/Fork\ profile.before-mainline-*)
+previous=("$fixture"/Fork\ profile.before-migration-*)
 [[ ${#previous[@]} == 1 && -f "${previous[0]}/keep-me" ]] || fail 'Previous destination was not preserved'
 [[ $(/usr/bin/stat -f %Lp "$backup") == 700 ]] || fail 'Backup directory not private'
 [[ $(/usr/bin/stat -f %Lp "${archives[0]}") == 600 ]] || fail 'Archive not private'
@@ -64,4 +68,24 @@ if (helium_running() { return 0; }; assert_helium_closed) > /dev/null 2>&1; then
 # Refuse replacing symlinked destinations.
 /bin/ln -s "$fixture/Fork profile" "$fixture/Linked profile"
 if (install_profile_copy "$mainline" "$fixture/Linked profile" "$backup" fixture) > /dev/null 2>&1; then fail 'Symlink destination accepted'; fi
-printf 'PASS: backup, archive integrity, complete migration, preservation, permissions, and failure guards\n'
+
+# Reverse migration brings new fork data back and retains the mainline state.
+printf 'new fork bookmark\n' > "$fixture/Fork profile/Default/new-bookmark"
+printf 'mainline sentinel\n' > "$mainline/sentinel"
+/bin/mkdir "$fixture/Reverse backups"
+(main --reverse-from helium-3 --output-dir "$fixture/Reverse backups") > "$fixture/reverse.log"
+[[ -f "$mainline/Default/new-bookmark" ]] || fail 'Reverse migration missed new data'
+preserved=("$fixture"/Mainline\ profile.before-migration-*)
+[[ ${#preserved[@]} == 1 && -f "${preserved[0]}/sentinel" ]] || fail 'Reverse migration lost original mainline'
+[[ -f "$fixture/Fork profile/Default/new-bookmark" ]] || fail 'Reverse migration changed source'
+
+# A Chromium downgrade or ambiguous direction is refused before backup/install.
+printf '155.0.1.1' > "$fixture/Fork profile/Last Version"
+if (main --reverse-from helium-3 --output-dir "$fixture/Reverse backups") > /dev/null 2>&1; then fail 'Downgrade accepted'; fi
+[[ $(/bin/cat "$mainline/Last Version") == 154.0.8037.57 ]] || fail 'Downgrade changed destination'
+if (main --reverse-from helium-3 --migrate-to helium-3 --output-dir "$fixture/Downloads") > /dev/null 2>&1; then fail 'Ambiguous direction accepted'; fi
+printf '154.0.8037.58' > "$fixture/Fork profile/Last Version"
+if (check_reverse_version "$fixture/Fork profile") > /dev/null 2>&1; then fail 'Patch-version downgrade accepted'; fi
+printf '154.0.8037.56' > "$fixture/Fork profile/Last Version"
+check_reverse_version "$fixture/Fork profile"
+printf 'PASS: backup, forward/reverse migration, integrity, preservation, permissions, process detection and downgrade guards\n'
