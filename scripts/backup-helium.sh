@@ -10,6 +10,7 @@ usage() {
 Usage: bash backup-helium.sh [--migrate-to helium-3|user-scripts]
                              [--reverse-from helium-3|user-scripts]
                              [--profile-dir PATH] [--output-dir PATH]
+                             [--resume-backup PATH]
 
 Backs up the complete mainline Helium user-data directory, including every
 profile and Local State, to a dated folder in Downloads. Waits for all Helium
@@ -24,6 +25,9 @@ apps to quit. Does not quit them for you or change the mainline profile.
                           Chromium to be at least as new as the source profile.
 --profile-dir PATH        Override the mainline user-data directory.
 --output-dir PATH         Use an existing directory instead of Downloads.
+--resume-backup PATH      Finish an interrupted migration from its backup folder.
+                          Requires --migrate-to or --reverse-from and a complete
+                          .work/Profile that still matches the source profile.
 --help                    Show this help.
 
 Run as your normal macOS user, without sudo. Keep Helium closed until finished.
@@ -133,14 +137,23 @@ check_reverse_version() {
 
 install_profile_copy() {
   local source="$1" destination="$2" backup_dir="$3" stamp="$4"
-  local parent prepared saved
+  local parent prepared saved scratch=''
+  # Only consume the private, verified staging copy, never a live profile.
+  [[ "$source" == "$backup_dir/.work/Profile" && -d "$source" &&
+     ! -L "$backup_dir/.work" && ! -L "$source" ]] || die 'Expected the backup staging profile.'
   parent=$(/usr/bin/dirname "$destination")
   [[ ! -L "$destination" ]] || die 'The destination is a symlink; refusing to replace it.'
   [[ ! -e "$destination" || -d "$destination" ]] || die 'The destination exists but is not a directory.'
   /bin/mkdir -p "$parent"
-  prepared=$(/usr/bin/mktemp -d "$parent/.helium-profile-copy.XXXXXX")
-  copy_profile "$source" "$prepared/profile"
-  verify_copy "$source" "$prepared/profile"
+  if [[ "$(/usr/bin/stat -f %d "$source")" == "$(/usr/bin/stat -f %d "$parent")" ]]; then
+    # A rename on the same filesystem consumes no second full profile copy.
+    prepared="$source"
+  else
+    scratch=$(/usr/bin/mktemp -d "$parent/.helium-profile-copy.XXXXXX")
+    prepared="$scratch/profile"
+    copy_profile "$source" "$prepared"
+    verify_copy "$source" "$prepared"
+  fi
   assert_helium_closed
   saved="${destination}.before-migration-${stamp}-$$"
   [[ ! -e "$saved" && ! -L "$saved" ]] || die "Recovery path already exists: $saved"
@@ -148,31 +161,51 @@ install_profile_copy() {
     /bin/mv "$destination" "$saved"
     printf 'Previous destination profile: %s\n' "$saved" | /usr/bin/tee -a "$backup_dir/MIGRATION.txt"
   fi
-  if ! /bin/mv "$prepared/profile" "$destination"; then
+  if ! /bin/mv "$prepared" "$destination"; then
     # Restore only if the failed move left the destination absent.
     if [[ ! -e "$destination" && ! -L "$destination" && -d "$saved" ]]; then
       /bin/mv "$saved" "$destination"
     fi
     die "Could not install the profile copy. Recovery files remain in $prepared and $saved."
   fi
-  /bin/rmdir "$prepared"
+  [[ -z "$scratch" ]] || /bin/rmdir "$scratch"
   printf 'Installed profile copy: %s\n' "$destination" | /usr/bin/tee -a "$backup_dir/MIGRATION.txt"
+}
+
+verify_resume_backup() {
+  local backup_dir="$1" source="$2" archive checksum expected actual
+  local archives=("$backup_dir"/Helium-profile-*.zip)
+  [[ ${#archives[@]} == 1 && -f "${archives[0]}" && ! -L "${archives[0]}" ]] || die 'Expected one complete profile ZIP in the backup folder.'
+  archive="${archives[0]}"
+  checksum="$archive.sha256"
+  [[ -f "$checksum" && ! -L "$checksum" ]] || die 'The backup ZIP has no checksum file.'
+  # Read only the digest. Never follow paths from a checksum file.
+  expected=$(/usr/bin/awk 'NR==1 { print $1 }' "$checksum")
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || die 'The backup checksum is invalid.'
+  actual=$(/usr/bin/shasum -a 256 "$archive")
+  [[ "${actual%% *}" == "$expected" ]] || die 'The backup ZIP checksum does not match.'
+  /usr/bin/unzip -tq "$archive" > /dev/null || die 'The backup ZIP failed its integrity check.'
+  [[ -d "$backup_dir/.work/Profile" && -f "$backup_dir/.work/Profile/Local State" &&
+     ! -L "$backup_dir/.work" && ! -L "$backup_dir/.work/Profile" ]] || die 'No complete staging profile remains. Keep the ZIP and start a fresh backup when space is available.'
+  verify_copy "$source" "$backup_dir/.work/Profile"
+  assert_helium_closed
 }
 
 main() {
   local source
   source=$(mainline_profile_path)
-  local output="$HOME/Downloads" migrate='' reverse='' destination='' custom_source=0
+  local output="$HOME/Downloads" migrate='' reverse='' destination='' custom_source=0 resume=''
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --help|-h) usage; return 0 ;;
-      --migrate-to|--reverse-from|--profile-dir|--output-dir)
+      --migrate-to|--reverse-from|--profile-dir|--output-dir|--resume-backup)
         [[ $# -ge 2 && -n "$2" ]] || die "Missing value for $1"
         case "$1" in
           --migrate-to) migrate="$2" ;;
           --reverse-from) reverse="$2" ;;
           --profile-dir) source="$2"; custom_source=1 ;;
           --output-dir) output="$2" ;;
+          --resume-backup) resume="$2" ;;
         esac
         shift 2 ;;
       *) die "Unknown option: $1. Use --help." ;;
@@ -181,6 +214,12 @@ main() {
   [[ "$(/usr/bin/uname -s)" == Darwin ]] || die 'This script is for macOS.'
   [[ "$(/usr/bin/id -u)" -ne 0 ]] || die 'Run as your normal macOS user, without sudo.'
   [[ "$source" == /* && "$output" == /* ]] || die 'Use absolute paths for --profile-dir and --output-dir.'
+  if [[ -n "$resume" ]]; then
+    [[ "$resume" == /* && -d "$resume" && ! -L "$resume" ]] || die 'Use an existing absolute backup folder for --resume-backup.'
+    [[ -n "$migrate" || -n "$reverse" ]] || die '--resume-backup requires a migration direction.'
+    resume=$(cd "$resume" && pwd -P)
+    output=$(/usr/bin/dirname "$resume")
+  fi
   case "$migrate" in ''|helium-3|fork|user-scripts) ;; *) die 'Choose --migrate-to helium-3 or user-scripts.' ;; esac
   case "$reverse" in ''|helium-3|fork|user-scripts) ;; *) die 'Choose --reverse-from helium-3 or user-scripts.' ;; esac
   if [[ -n "$reverse" ]]; then
@@ -211,6 +250,15 @@ main() {
 
   local stamp backup_dir work archive_name archive
   stamp=$(/bin/date '+%Y%m%d-%H%M%S')
+  if [[ -n "$resume" ]]; then
+    [[ ! -e "$resume/MIGRATION.txt" && ! -L "$resume/MIGRATION.txt" ]] || die 'This backup has already reached installation. Review its MIGRATION.txt before continuing.'
+    printf '\nVerifying the existing ZIP and staging copy. No new backup will be created.\n'
+    verify_resume_backup "$resume" "$source"
+    install_profile_copy "$resume/.work/Profile" "$destination" "$resume" "$stamp"
+    /bin/rm -rf "$resume/.work"
+    printf '\nFinished. Backup folder:\n%s\nYou can now open the destination browser.\n' "$resume"
+    return 0
+  fi
   backup_dir=$(/usr/bin/mktemp -d "$output/Helium-profile-backup-${stamp}.XXXXXX")
   work="$backup_dir/.work"
   /bin/mkdir "$work"
@@ -252,7 +300,7 @@ If tabs do not reopen, use History > Recently Closed or Cmd+Shift+T.
 EOF
   printf 'Verified backup: %s\n' "$archive"
   if [[ -n "$destination" ]]; then
-    printf '\nPreparing the destination profile copy...\n'
+    printf '\nInstalling the verified profile copy...\n'
     install_profile_copy "$work/Profile" "$destination" "$backup_dir" "$stamp"
   fi
   /bin/rm -rf "$work"

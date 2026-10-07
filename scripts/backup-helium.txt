@@ -20,7 +20,7 @@ script prints Finished. It does not close apps for you. No sudo, Homebrew,
 Python or third-party package is required.
 
 The script first saves a verified ZIP and SHA-256 file in a dated folder in
-Downloads. It then copies the mainline profile into Helium-3. The original
+Downloads. It then installs that verified staging copy into Helium-3. The original
 mainline profile stays where it was. Any previous Helium-3 profile is renamed
 beside itself with a before-migration suffix; MIGRATION.txt records its path.
 
@@ -75,8 +75,33 @@ bundle identifier, signing team or automatic-update feed.
 
 The script compares file contents, verifies the ZIP, and writes a checksum and
 restore instructions. Failed operations can leave partial backup folders; only
-Finished indicates success. Allow disk space for a profile copy and ZIP, plus
-another profile copy if migrating. Existing destination folders are preserved.
+Finished indicates success. Allow disk space for a profile copy and ZIP.
+When Downloads and the destination share a filesystem, migration moves the
+completed staging copy into place without making another full copy. Backups
+on a separate volume still require space for a copy on the destination volume.
+Existing destination folders are preserved.
+
+RESUME AFTER AN INTERRUPTED MIGRATION
+
+If the script printed Verified backup but failed while preparing the destination,
+keep the ZIP and the hidden .work/Profile inside that same backup folder. Quit
+all Helium apps. Download the latest script, then run:
+
+bash "$HOME/Downloads/backup-helium.sh" --resume-backup "/absolute/path/to/Helium-profile-backup-DATE.SUFFIX" --migrate-to helium-3
+
+Use the exact backup folder from your earlier output. Resume checks the ZIP's
+checksum and integrity, and compares the complete staging copy against the
+closed source profile before installing it. It does not make another backup.
+If you have browsed since the failed attempt and the source changed, resume
+refuses to install the old snapshot. Free space and make a fresh backup instead.
+For reverse migration, use --reverse-from helium-3 with --resume-backup.
+
+Older scripts could leave a second, incomplete copy inside a hidden directory
+named .helium-profile-copy.SUFFIX beside the destination. Once you have checked
+your verified ZIP, remove only the exact incomplete scratch directory named in
+that failure to reclaim space. Do not remove the original profile, destination,
+ZIP, or the backup folder's .work/Profile. Resume does not delete old scratch
+directories automatically.
 
 The backup contains private browser data and is not encrypted as an archive.
 Nothing is uploaded. No Keychain secret is read or exported. On the same Mac

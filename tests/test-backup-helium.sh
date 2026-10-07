@@ -46,6 +46,51 @@ previous=("$fixture"/Fork\ profile.before-migration-*)
 [[ ${#previous[@]} == 1 && -f "${previous[0]}/keep-me" ]] || fail 'Previous destination was not preserved'
 [[ $(/usr/bin/stat -f %Lp "$backup") == 700 ]] || fail 'Backup directory not private'
 [[ $(/usr/bin/stat -f %Lp "${archives[0]}") == 600 ]] || fail 'Archive not private'
+[[ ! -e "$backup/.work" ]] || fail 'Successful migration retained staging data'
+
+# Simulate the reported failure after ZIP verification but before installation.
+/bin/mkdir "$fixture/Interrupted backups" "$fixture/Resume profile"
+fork_profile_path() { printf '%s\n' "$fixture/Resume profile"; }
+if (install_profile_copy() { exit 73; }; main --profile-dir "$mainline" --output-dir "$fixture/Interrupted backups" --migrate-to helium-3) > "$fixture/interrupted.log"; then
+  fail 'Simulated interrupted migration unexpectedly succeeded'
+fi
+interrupted=("$fixture/Interrupted backups"/Helium-profile-backup-*)
+resume="${interrupted[0]}"
+resume_archives=("$resume"/*.zip)
+resume_archive="${resume_archives[0]}"
+[[ -f "$resume/.work/Profile/Local State" ]] || fail 'Interrupted migration lost complete staging copy'
+staging_inode=$(/usr/bin/stat -f %i "$resume/.work/Profile")
+printf 'destination must survive failed resume\n' > "$fixture/Resume profile/resume-sentinel"
+
+# Invalid archives, changed staging or live data, and repeated installation fail
+# before changing either profile. Restore each synthetic input after rejection.
+original_digest=$(/bin/cat "$resume_archive.sha256")
+printf '%064d  ignored-name.zip\n' 0 > "$resume_archive.sha256"
+if (main --resume-backup "$resume" --migrate-to helium-3) > /dev/null 2>&1; then fail 'Bad checksum accepted'; fi
+printf '%s\n' "$original_digest" > "$resume_archive.sha256"
+printf 'changed\n' > "$resume/.work/Profile/Local State"
+if (main --resume-backup "$resume" --migrate-to helium-3) > /dev/null 2>&1; then fail 'Changed staging accepted'; fi
+/bin/cp -p "$mainline/Local State" "$resume/.work/Profile/Local State"
+printf 'new browsing data\n' > "$mainline/new-data"
+if (main --resume-backup "$resume" --migrate-to helium-3) > /dev/null 2>&1; then fail 'Changed live profile accepted'; fi
+/bin/rm "$mainline/new-data"
+printf 'previous installation\n' > "$resume/MIGRATION.txt"
+if (main --resume-backup "$resume" --migrate-to helium-3) > /dev/null 2>&1; then fail 'Already installed backup accepted'; fi
+/bin/rm "$resume/MIGRATION.txt"
+if (main --resume-backup "$resume") > /dev/null 2>&1; then fail 'Resume without direction accepted'; fi
+[[ -f "$fixture/Resume profile/resume-sentinel" ]] || fail 'Failed resume changed destination'
+
+# Same-volume recovery must move the completed copy without copying or archiving
+# again. The directory inode proves it reused the staging copy, not the source.
+(copy_profile() { fail 'Resume attempted another profile copy'; }; main --resume-backup "$resume" --migrate-to helium-3) > "$fixture/resume.log"
+[[ $(/usr/bin/stat -f %i "$fixture/Resume profile") == "$staging_inode" ]] || fail 'Resume did not reuse staging copy'
+[[ -d "$mainline" && -L "$mainline/SingletonLock" ]] || fail 'Resume moved or modified the original profile'
+verify_copy "$mainline" "$fixture/Resume profile"
+[[ -f "$resume_archive" && ! -e "$resume/.work" ]] || fail 'Resume removed ZIP or left staging data'
+[[ -f "$(/usr/bin/sed -n 's/^Previous destination profile: //p' "$resume/MIGRATION.txt")/resume-sentinel" ]] || fail 'Resume lost previous destination'
+if (main --resume-backup "$resume" --migrate-to helium-3) > /dev/null 2>&1; then fail 'Completed resume accepted again'; fi
+
+fork_profile_path() { printf '%s\n' "$fixture/Fork profile"; }
 
 # Default operation makes a backup without installing into the fork.
 printf 'after-migration sentinel\n' > "$fixture/Fork profile/sentinel"
@@ -67,7 +112,10 @@ if (helium_running() { return 0; }; assert_helium_closed) > /dev/null 2>&1; then
 
 # Refuse replacing symlinked destinations.
 /bin/ln -s "$fixture/Fork profile" "$fixture/Linked profile"
-if (install_profile_copy "$mainline" "$fixture/Linked profile" "$backup" fixture) > /dev/null 2>&1; then fail 'Symlink destination accepted'; fi
+/bin/mkdir -p "$fixture/Symlink backup/.work"
+copy_profile "$mainline" "$fixture/Symlink backup/.work/Profile"
+if (install_profile_copy "$fixture/Symlink backup/.work/Profile" "$fixture/Linked profile" "$fixture/Symlink backup" fixture) > /dev/null 2>&1; then fail 'Symlink destination accepted'; fi
+[[ -f "$fixture/Symlink backup/.work/Profile/Local State" ]] || fail 'Rejected destination consumed staging data'
 
 # Reverse migration brings new fork data back and retains the mainline state.
 printf 'new fork bookmark\n' > "$fixture/Fork profile/Default/new-bookmark"
@@ -88,4 +136,4 @@ printf '154.0.8037.58' > "$fixture/Fork profile/Last Version"
 if (check_reverse_version "$fixture/Fork profile") > /dev/null 2>&1; then fail 'Patch-version downgrade accepted'; fi
 printf '154.0.8037.56' > "$fixture/Fork profile/Last Version"
 check_reverse_version "$fixture/Fork profile"
-printf 'PASS: backup, forward/reverse migration, integrity, preservation, permissions, process detection and downgrade guards\n'
+printf 'PASS: backup, forward/reverse migration, interrupted recovery without recopying, integrity, preservation, permissions, process detection and downgrade guards\n'
