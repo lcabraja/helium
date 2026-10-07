@@ -1303,7 +1303,7 @@
    ShareServicePrerenderBrowserTest()
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1873,6 +1873,44 @@
+@@ -1873,6 +1873,45 @@
 
    if (is_android) {
      deps += [ "//ui/compositor" ]
@@ -1316,6 +1316,7 @@
 +    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 +    sources = [
 +      "base/helium_new_tab_menu_browsertest_mac.mm",
++      "base/helium_video_popout_browsertest.cc",
 +      "base/helium_webui_regression_browsertest.cc",
 +    ]
 +    deps = [
@@ -1348,7 +1349,7 @@
    }
  }
 
-@@ -3062,10 +3100,6 @@
+@@ -3062,10 +3101,6 @@
        "../browser/ui/webid/identity_dialog_controller_browsertest.cc",
        "../common/chrome_paths_browsertest.cc",
        "../common/time_format_browsertest.cc",
@@ -2074,3 +2075,215 @@
 
      web_local_frame_ = blink::WebLocalFrame::CreateMainFrame(
          web_view_, &web_local_frame_client_, nullptr, mojo::NullRemote(),
+--- /dev/null
++++ b/chrome/test/base/helium_video_popout_browsertest.cc
+@@ -0,0 +1,209 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "base/test/run_until.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/gfx/geometry/point_conversions.h"
++
++// Exercise the bundled component, its isolated-world content script, hit
++// testing and real user activation. No test copy of the production JS is used.
++class HeliumVideoPopoutBrowserTest : public InProcessBrowserTest {
++ protected:
++  content::WebContents* contents() {
++    return browser()->tab_strip_model()->GetActiveWebContents();
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("/empty.html")));
++    // A live canvas provides real video frames without an external media file.
++    ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++      document.body.style.cssText = 'margin:0;height:2000px';
++      window.player = document.createElement('div');
++      player.style.cssText = 'position:relative;width:320px;height:180px';
++      window.video = document.createElement('video');
++      video.style.cssText = 'width:320px;height:180px';
++      video.muted = true;
++      player.append(video);
++      document.body.append(player);
++      const canvas = document.createElement('canvas');
++      canvas.width = 640;
++      canvas.height = 360;
++      const context = canvas.getContext('2d');
++      function draw() {
++        context.fillStyle = '#82b9e8';
++        context.fillRect(0, 0, 640, 360);
++        requestAnimationFrame(draw);
++      }
++      draw();
++      video.srcObject = canvas.captureStream(30);
++      video.play();
++    )JS"));
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return content::EvalJs(contents(), "video.readyState >= 2") == true;
++    }));
++    content::SimulateEndOfPaintHoldingOnPrimaryMainFrame(contents());
++  }
++
++  bool Visible() {
++    return content::EvalJs(contents(), R"JS(
++      !!document.querySelector('#helium-video-popout:popover-open')
++    )JS") == true;
++  }
++
++  void Hover() {
++    content::SimulateMouseEvent(
++        contents(), blink::WebInputEvent::Type::kMouseMove, gfx::Point(80, 60));
++  }
++
++  void ClickPopout() {
++    const gfx::Point point =
++        gfx::ToRoundedPoint(content::GetCenterCoordinatesOfElementWithId(
++            contents(), "helium-video-popout"));
++    content::SimulateMouseClickAt(contents(), 0,
++                                  blink::WebMouseEvent::Button::kLeft, point);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(HeliumVideoPopoutBrowserTest,
++                       DynamicVideoOpensAndReturnsWithTrustedClick) {
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ClickPopout();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(contents(),
++                           "document.pictureInPictureElement === video") ==
++           true;
++  }));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ClickPopout();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(contents(),
++                           "document.pictureInPictureElement === null") == true;
++  }));
++  ASSERT_TRUE(content::ExecJs(contents(), "scrollTo(0, 400)"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Visible(); }));
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumVideoPopoutBrowserTest,
++                       DisabledAndRemovedVideosDoNotOfferPopout) {
++  ASSERT_TRUE(
++      content::ExecJs(contents(), "video.disablePictureInPicture = true"));
++  Hover();
++  // Flush input and the animation frame used by the hover controller.
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "new Promise(r => requestAnimationFrame(() => "
++                              "requestAnimationFrame(r)))"));
++  EXPECT_FALSE(Visible());
++  ASSERT_TRUE(
++      content::ExecJs(contents(), "video.disablePictureInPicture = false"));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ASSERT_TRUE(content::ExecJs(contents(), "video.remove()"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Visible(); }));
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumVideoPopoutBrowserTest,
++                       CustomControlsWorkButModalAndScrollHideButton) {
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    const overlay = document.createElement('div');
++    overlay.style.cssText = 'position:absolute;inset:0';
++    player.append(overlay);
++  )JS"));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    window.dialog = document.createElement('dialog');
++    dialog.style.cssText = 'position:fixed;inset:0;margin:0;width:400px;height:300px';
++    document.body.append(dialog);
++    dialog.showModal();
++  )JS"));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Visible(); }));
++  ASSERT_TRUE(content::ExecJs(contents(), "dialog.remove()"));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ASSERT_TRUE(content::ExecJs(contents(), "scrollTo(0, 400)"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Visible(); }));
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumVideoPopoutBrowserTest,
++                       OpenShadowPlayerWithStrictStylePolicy) {
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    const policy = document.createElement('meta');
++    policy.httpEquiv = 'Content-Security-Policy';
++    policy.content = "style-src 'none'";
++    document.head.append(policy);
++    const host = document.createElement('div');
++    player.replaceWith(host);
++    const shadow = host.attachShadow({mode: 'open'});
++    const replacement = document.createElement('video');
++    replacement.width = 320;
++    replacement.height = 180;
++    replacement.muted = true;
++    replacement.srcObject = video.srcObject;
++    video = replacement;
++    shadow.append(video);
++    video.play();
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(contents(), "video.readyState >= 2") == true;
++  }));
++  Hover();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Visible(); }));
++  ClickPopout();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(contents(),
++                           "document.pictureInPictureElement !== null") == true;
++  }));
++  EXPECT_TRUE(content::ExecJs(contents(), "document.exitPictureInPicture()"));
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumVideoPopoutBrowserTest, EmbeddedPlayer) {
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    window.frame = document.createElement('iframe');
++    frame.style.cssText = 'display:block;width:500px;height:400px;border:0';
++    frame.src = '/empty.html';
++    document.body.append(frame);
++    new Promise(resolve => frame.onload = () => {
++      frame.contentDocument.body.style.margin = '0';
++      player.remove();
++      video = frame.contentDocument.createElement('video');
++      video.style.cssText = 'width:320px;height:180px';
++      video.muted = true;
++      video.src = '/media/bear.webm';
++      frame.contentDocument.body.append(video);
++      resolve();
++    });
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(contents(), "video.readyState >= 2") == true;
++  }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    Hover();
++    return content::EvalJs(contents(), R"JS(
++      !!frame.contentDocument.querySelector('#helium-video-popout:popover-open')
++    )JS") == true;
++  }));
++  content::SimulateMouseClickAt(
++      contents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(286, 30));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(
++               contents(),
++               "frame.contentDocument.pictureInPictureElement === video") ==
++           true;
++  }));
++  EXPECT_TRUE(content::ExecJs(contents(),
++                              "frame.contentDocument.exitPictureInPicture()"));
++}

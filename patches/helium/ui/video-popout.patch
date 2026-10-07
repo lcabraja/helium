@@ -1,0 +1,343 @@
+--- a/chrome/browser/resources/component_extension_resources.grd
++++ b/chrome/browser/resources/component_extension_resources.grd
+@@ -12,6 +12,9 @@
+   </outputs>
+   <release seq="1">
+     <includes>
++      <include name="IDR_HELIUM_VIDEO_POPOUT_MANIFEST" file="helium_video_popout/manifest.json" type="BINDATA" />
++      <include name="IDR_HELIUM_VIDEO_POPOUT_JS" file="helium_video_popout/video_popout.js" type="BINDATA" />
++      <include name="IDR_HELIUM_VIDEO_POPOUT_MESSAGES" file="helium_video_popout/_locales/en/messages.json" type="BINDATA" />
+       <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />
+
+       <include name="IDR_NETWORK_SPEECH_SYNTHESIS_MV3_AUDIO_HTML" file="network_speech_synthesis/mv3/audio.html" type="BINDATA" />
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -563,6 +563,8 @@
+     AddWebStoreApp();
+     AddUBlock();
+     AddExtstoreFixups();
++    Add(IDR_HELIUM_VIDEO_POPOUT_MANIFEST,
++        base::FilePath(FILE_PATH_LITERAL("helium_video_popout")));
+ #if BUILDFLAG(IS_CHROMEOS)
+     AddChromeApp();
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+--- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
++++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
+@@ -46,6 +46,7 @@
+       extension_misc::kPdfExtensionId,
+       helium::kUBlockOriginComponentId,
+       helium::kExtstoreFixupsExtensionId,
++      "ajjjckgknmklidlbaijppkjcnfhpillk",  // Helium video pop-out.
+ #if BUILDFLAG(IS_CHROMEOS)
+       extension_misc::kAssessmentAssistantExtensionId,
+       extension_misc::kAccessibilityCommonExtensionId,
+@@ -110,6 +111,7 @@
+     case IDR_WEBSTORE_MANIFEST:
+     case IDR_UBLOCK_MANIFEST_JSON:
+     case IDR_EXTSTORE_FIXUPS_MANIFEST_JSON:
++    case IDR_HELIUM_VIDEO_POPOUT_MANIFEST:
+
+ #if BUILDFLAG(IS_CHROMEOS)
+     // Separate ChromeOS list, as it is quite large.
+--- /dev/null
++++ b/chrome/browser/resources/helium_video_popout/_locales/en/messages.json
+@@ -0,0 +1,14 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++{
++  "popOut": {
++    "message": "Pop out video"
++  },
++  "returnToTab": {
++    "message": "Return video to tab"
++  },
++  "unavailable": {
++    "message": "This video cannot be popped out."
++  }
++}
+--- /dev/null
++++ b/chrome/browser/resources/helium_video_popout/manifest.json
+@@ -0,0 +1,24 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++{
++  "name": "Helium video pop-out",
++  "description": "Pop HTML5 videos into the native picture-in-picture window.",
++  "version": "1.0.0",
++  "manifest_version": 3,
++  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4nrzaD3UdFJ5ZD6mY+w1I00stDWCKkUMRSmubBC26Rqt5/bla4qkF0PIfj/6YoSo2l2Vs3ZZZSgaMCL2mrdk5p6X03h+e8TNskz7WIrrU3TlQCNxul63n8snA2atiTf8n/mLzioNIWljd9HSYj6GUqB/UNzGhHhH1KQoJvRw0J6iqfU527AMCHhJ15p0HPSxwnhs0Rya9V7q6KrXknmcNpeWdwj7Ap60iR3najpz9m3V7ij2FgGgmDgkeBdU3r50kckXTHWV/ZFQ6unQ8vLhA6J/WpRItuCDyaDqUAsdXWxc6uUnWkS0UU8CCJih8tS7kPFKj+7i0NdlGQn/dw+bywIDAQAB",
++  "default_locale": "en",
++  "content_scripts": [
++    {
++      "matches": [
++        "<all_urls>"
++      ],
++      "js": [
++        "video_popout.js"
++      ],
++      "all_frames": true,
++      "match_origin_as_fallback": true,
++      "run_at": "document_idle"
++    }
++  ]
++}
+--- /dev/null
++++ b/chrome/browser/resources/helium_video_popout/video_popout.js
+@@ -0,0 +1,255 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++// A component content script runs in its own world in each frame. Use the
++// browser's video PiP API, keeping playback, cookies and navigation in that tab.
++(() => {
++  if (!document.pictureInPictureEnabled) {
++    return;
++  }
++
++  const videos = new Set();
++  const roots = new WeakSet();
++  let video = null;
++  let host = null;
++  let button = null;
++  let pointer = null;
++  let frame = 0;
++  let pending = false;
++
++  const message = name => chrome.i18n.getMessage(name);
++  const eligible = candidate => candidate.isConnected &&
++      candidate.readyState >= HTMLMediaElement.HAVE_METADATA &&
++      candidate.videoWidth > 0 && !candidate.disablePictureInPicture &&
++      !candidate.error && candidate.checkVisibility({
++        checkOpacity: true, checkVisibilityCSS: true,
++      });
++
++  function hide() {
++    video = null;
++    if (host?.matches(':popover-open')) {
++      host.hidePopover();
++    }
++  }
++
++  function updateLabel() {
++    const label = message(document.pictureInPictureElement === video ?
++        'returnToTab' : 'popOut');
++    button.title = label;
++    button.setAttribute('aria-label', label);
++  }
++
++  function createButton() {
++    host = document.createElement('div');
++    host.id = 'helium-video-popout';
++    host.setAttribute('popover', 'manual');
++    // The top layer avoids custom-player overlays and transformed ancestors.
++    host.style.cssText = 'all:initial!important;position:fixed!important;' +
++        'inset:auto!important;margin:0!important;padding:0!important;' +
++        'border:0!important;width:44px!important;height:36px!important;' +
++        'background:transparent!important;overflow:visible!important;';
++    const shadow = host.attachShadow({mode: 'closed'});
++    const style = new CSSStyleSheet();
++    style.replaceSync(`
++      :host::backdrop { display: none; }
++      button { all: initial; box-sizing: border-box; width: 44px; height: 36px;
++        display: grid; place-items: center; border: 1px solid #ffffff66;
++        border-radius: 9px; background: #d0eaff; color: #16344c;
++        box-shadow: 0 2px 8px #0006; cursor: pointer; }
++      button:hover { background: #e5f3ff; }
++      button:focus-visible { outline: 3px solid white; outline-offset: 2px; }
++      button:disabled { cursor: wait; opacity: .7; }
++      svg { width: 24px; height: 24px; pointer-events: none; }
++    `);
++    shadow.adoptedStyleSheets = [style];
++    button = document.createElement('button');
++    button.type = 'button';
++    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
++    svg.setAttribute('viewBox', '0 0 24 24');
++    svg.setAttribute('aria-hidden', 'true');
++    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
++    path.setAttribute('d', 'M20 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16' +
++        'a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H4V5h16v14Zm-2-8h-8v6h8v-6Z');
++    path.setAttribute('fill', 'currentColor');
++    svg.append(path);
++    button.append(svg);
++    shadow.append(button);
++    button.addEventListener('click', async event => {
++      // Page-dispatched clicks must never open a browser-owned window.
++      if (!event.isTrusted || pending || !video || !eligible(video)) {
++        return;
++      }
++      event.preventDefault();
++      event.stopPropagation();
++      const target = video;
++      pending = true;
++      button.disabled = true;
++      try {
++        if (document.pictureInPictureElement === target) {
++          await document.exitPictureInPicture();
++        } else {
++          await target.requestPictureInPicture();
++        }
++        if (video === target) {
++          updateLabel();
++        }
++      } catch {
++        // Respect iframe permissions and player restrictions. Never alter the
++        // site's disablePictureInPicture attribute to force entry.
++        button.title = message('unavailable');
++        button.setAttribute('aria-label', message('unavailable'));
++      } finally {
++        pending = false;
++        button.disabled = false;
++      }
++    });
++  }
++
++  function update() {
++    frame = 0;
++    if (!pointer || document.hidden) {
++      hide();
++      return;
++    }
++    let candidate = null;
++    let rect = null;
++    const hits = document.elementsFromPoint(pointer.x, pointer.y);
++    for (const item of videos) {
++      if (!item.isConnected) {
++        videos.delete(item);
++        continue;
++      }
++      if (!eligible(item)) {
++        continue;
++      }
++      const bounds = item.getBoundingClientRect();
++      if (bounds.width < 80 || bounds.height < 48 ||
++          pointer.x < bounds.left || pointer.x > bounds.right ||
++          pointer.y < bounds.top || pointer.y > bounds.bottom) {
++        continue;
++      }
++      // Account for pointer-events:none videos and controls in custom players,
++      // without offering a button for videos behind unrelated page dialogs.
++      const top = hits.find(element => element !== host);
++      let player = item.parentElement;
++      if (player?.parentElement !== document.body &&
++          player?.parentElement !== document.documentElement) {
++        player = player?.parentElement;
++      }
++      const customControls = player && player !== document.body &&
++          player !== document.documentElement && player.contains(top) &&
++          !top?.closest('dialog, [popover]');
++      if (top && top !== item && !customControls &&
++          !top.shadowRoot?.contains(item)) {
++        continue;
++      }
++      if (!rect || bounds.width * bounds.height < rect.width * rect.height) {
++        candidate = item;
++        rect = bounds;
++      }
++    }
++    if (!candidate) {
++      hide();
++      return;
++    }
++    video = candidate;
++    if (!host) {
++      createButton();
++    }
++    if (!host.isConnected) {
++      document.documentElement.append(host);
++    }
++    updateLabel();
++    const left = Math.max(4, Math.min(rect.right - 56, innerWidth - 48));
++    const top = Math.max(4, Math.min(rect.top + 12, innerHeight - 40));
++    host.style.setProperty('left', `${left}px`, 'important');
++    host.style.setProperty('top', `${top}px`, 'important');
++    if (!host.matches(':popover-open')) {
++      host.showPopover();
++    }
++  }
++
++  function schedule() {
++    if (!frame && (videos.size || video)) {
++      frame = requestAnimationFrame(update);
++    }
++  }
++
++  function scan(root) {
++    if (root instanceof HTMLVideoElement) {
++      videos.add(root);
++    }
++    root.querySelectorAll?.('video').forEach(item => videos.add(item));
++    if (root.shadowRoot) {
++      observe(root.shadowRoot);
++    }
++  }
++
++  const observer = new MutationObserver(records => {
++    let removed = false;
++    for (const record of records) {
++      record.addedNodes.forEach(scan);
++      removed ||= record.removedNodes.length > 0;
++    }
++    if (removed) {
++      for (const item of videos) {
++        if (!item.isConnected) {
++          videos.delete(item);
++        }
++      }
++    }
++    schedule();
++  });
++
++  function observe(root) {
++    if (roots.has(root)) {
++      return;
++    }
++    roots.add(root);
++    scan(root);
++    observer.observe(root, {childList: true, subtree: true});
++  }
++
++  observe(document);
++  document.addEventListener('pointermove', event => {
++    // Discover open shadow-root players when the pointer first enters them,
++    // rather than continually walking every element on arbitrary web pages.
++    for (const element of event.composedPath()) {
++      if (element instanceof ShadowRoot) {
++        observe(element);
++      } else if (element instanceof HTMLVideoElement) {
++        videos.add(element);
++      }
++    }
++    pointer = {x: event.clientX, y: event.clientY};
++    schedule();
++  }, {capture: true, passive: true});
++  document.addEventListener('pointerout', event => {
++    if (!event.relatedTarget) {
++      pointer = null;
++      hide();
++    }
++  }, {capture: true, passive: true});
++  document.addEventListener('loadedmetadata', event => {
++    if (event.target instanceof HTMLVideoElement) {
++      videos.add(event.target);
++      schedule();
++    }
++  }, true);
++  // Hide at the start of a scroll gesture as well as on the resulting scroll.
++  // Composited scrolling can move the player before its main-thread event.
++  // A fresh pointer movement will select the video at the new position.
++  for (const type of ['wheel', 'scroll']) {
++    document.addEventListener(type, () => {
++      pointer = null;
++      hide();
++    }, {capture: true, passive: true});
++  }
++  for (const type of ['fullscreenchange', 'enterpictureinpicture',
++                      'leavepictureinpicture', 'visibilitychange']) {
++    document.addEventListener(type, schedule, {capture: true, passive: true});
++  }
++  window.addEventListener('resize', schedule, {passive: true});
++  window.addEventListener('blur', hide);
++})();
